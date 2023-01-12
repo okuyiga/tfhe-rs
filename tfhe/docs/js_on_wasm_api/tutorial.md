@@ -49,8 +49,10 @@ $
 
 ### Commented code to generate keys for shortint and encrypt a ciphertext
 
-WARNING: Be sure to update the path of the required clause in the example below for the TFHE 
+{% hint style=“warning” %}
+Be sure to update the path of the required clause in the example below for the TFHE
 package that was just built.
+{% endhint %}
 
 ```javascript
 // Here import assert to check the decryption went well and panic otherwise
