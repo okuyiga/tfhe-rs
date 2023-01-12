@@ -52,7 +52,7 @@ $
 WARNING: Be sure to update the path of the required clause in the example below for the TFHE 
 package that was just built.
 
-```js
+```javascript
 // Here import assert to check the decryption went well and panic otherwise
 const assert = require('node:assert').strict;
 // Import the Shortint module from the TFHE-rs package generated earlier
