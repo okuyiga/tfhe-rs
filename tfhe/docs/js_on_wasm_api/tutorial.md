@@ -6,17 +6,20 @@ Welcome to this TFHE-rs JS on WASM API tutorial!
 
 TFHE-rs uses WASM to expose a JS binding to the client-side primitives, like key generation and encryption, of the Boolean and shortint modules.
 
-There are several limitations at this time. Due to a lack of threading support in WASM key generation can be too slow to be practical for bigger parameter sets.
+There are several limitations at this time. Due to a lack of threading support in WASM, key 
+generation can be too slow to be practical for bigger parameter sets.
 
-Some parameters set lead to FHE keys that are too big to fit in the 2GB memory space of WASM rendering some parameters sets virtually unusable.
+Some parameter sets lead to FHE keys that are too big to fit in the 2GB memory space of WASM. 
+This means that some parameters sets are virtually unusable.
 
 ## First steps using TFHE-rs JS on WASM API
 
 ### Setting-up TFHE-rs JS on WASM API for use in nodejs programs.
 
-To build the JS on WASM bindings for TFHE-rs you will first need to install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) in addition to a compatible (>= 1.65) [`rust toolchain`](https://rustup.rs/).
+To build the JS on WASM bindings for TFHE-rs, you will first need to install [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) in addition to a compatible (>= 1.65) [`rust toolchain`](https://rustup.rs/).
 
-Then in a shell run the following to clone the TFHE-rs repo (one may want to checkout a specific tag, here the default branch is used for the build):
+Then, in a shell run the following to clone the TFHE-rs repo (one may want to checkout a 
+specific tag, here the default branch is used for the build):
 
 ```shell
 $ git clone https://github.com/zama-ai/tfhe-rs.git
@@ -31,11 +34,12 @@ $ rustup run wasm-pack build --release --target=nodejs --features=boolean-client
 [INFO]: :-) Your wasm pkg is ready to publish at ...
 ```
 
-The command above targets nodejs but a binding for a web browser can be generated as well using `--target=web` this use case will not be discussed in this tutorial.
+The command above targets nodejs. A binding for a web browser can be generated as well using 
+`--target=web`.  This use case will not be discussed in this tutorial.
 
-Boolean and shortint features are enabled here but it's possible to use one without the other.
+Both Boolean and shortint features are enabled here but it's possible to use one without the other.
 
-After the build a new directory "pkg" will have been created in the `tfhe` directory.
+After the build, a new directory ***pkg*** is present in the `tfhe` directory.
 
 ```shell
 $ ls pkg
@@ -45,7 +49,8 @@ $
 
 ### Commented code to generate keys for shortint and encrypt a ciphertext
 
-WARNING: Be sure to update the path of the require clause in the example below for the TFHE package that was just built.
+WARNING: Be sure to update the path of the required clause in the example below for the TFHE 
+package that was just built.
 
 ```js
 // Here import assert to check the decryption went well and panic otherwise
