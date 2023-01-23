@@ -64,8 +64,11 @@ use crate::core_crypto::entities::*;
 /// // Now we get the equivalent LweSecretKey from the GlweSecretKey
 /// let equivalent_lwe_sk = glwe_secret_key.clone().into_lwe_secret_key();
 ///
-/// let mut extracted_sample =
-///     LweCiphertext::new(0u64, equivalent_lwe_sk.lwe_dimension().to_lwe_size());
+/// let mut extracted_sample = LweCiphertext::new(
+///     0u64,
+///     equivalent_lwe_sk.lwe_dimension().to_lwe_size(),
+///     CiphertextModulus::new_native(),
+/// );
 ///
 /// // Here we chose to extract sample at index 42 (corresponding to the MonomialDegree(42))
 /// extract_lwe_sample_from_glwe_ciphertext(&glwe, &mut extracted_sample, MonomialDegree(42));
@@ -92,6 +95,10 @@ pub fn extract_lwe_sample_from_glwe_ciphertext<Scalar, InputCont, OutputCont>(
     OutputCont: ContainerMut<Element = Scalar>,
 {
     assert!(
+        output_lwe.ciphertext_modulus().is_native_modulus(),
+        "This operation only supports native moduli"
+    );
+    assert!(
         input_glwe.glwe_size().to_glwe_dimension().0 * input_glwe.polynomial_size().0
             == output_lwe.lwe_size().to_lwe_dimension().0,
         "Mismatch between equivalent LweDimension of input ciphertext and output ciphertext. \
@@ -105,7 +112,7 @@ pub fn extract_lwe_sample_from_glwe_ciphertext<Scalar, InputCont, OutputCont>(
     let (glwe_mask, glwe_body) = input_glwe.get_mask_and_body();
 
     // We copy the body
-    *lwe_body.0 = glwe_body.as_ref()[nth.0];
+    *lwe_body.data = glwe_body.as_ref()[nth.0];
 
     // We copy the mask (each polynomial is in the wrong order)
     lwe_mask.as_mut().copy_from_slice(glwe_mask.as_ref());

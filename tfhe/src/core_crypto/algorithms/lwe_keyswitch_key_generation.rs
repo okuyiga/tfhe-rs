@@ -25,6 +25,7 @@ use crate::core_crypto::entities::*;
 /// let output_lwe_dimension = LweDimension(2048);
 /// let decomp_base_log = DecompositionBaseLog(3);
 /// let decomp_level_count = DecompositionLevelCount(5);
+/// let ciphertext_modulus = CiphertextModulus::new_native();
 ///
 /// // Create the PRNG
 /// let mut seeder = new_seeder();
@@ -48,6 +49,7 @@ use crate::core_crypto::entities::*;
 ///     decomp_level_count,
 ///     input_lwe_dimension,
 ///     output_lwe_dimension,
+///     ciphertext_modulus,
 /// );
 ///
 /// generate_lwe_keyswitch_key(
@@ -130,6 +132,7 @@ pub fn allocate_and_generate_new_lwe_keyswitch_key<Scalar, InputKeyCont, OutputK
     decomp_base_log: DecompositionBaseLog,
     decomp_level_count: DecompositionLevelCount,
     noise_parameters: impl DispersionParameter,
+    ciphertext_modulus: CiphertextModulus<Scalar>,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) -> LweKeyswitchKeyOwned<Scalar>
 where
@@ -144,6 +147,7 @@ where
         decomp_level_count,
         input_lwe_sk.lwe_dimension(),
         output_lwe_sk.lwe_dimension(),
+        ciphertext_modulus,
     );
 
     generate_lwe_keyswitch_key(
@@ -171,6 +175,7 @@ where
 /// let output_lwe_dimension = LweDimension(2048);
 /// let decomp_base_log = DecompositionBaseLog(3);
 /// let decomp_level_count = DecompositionLevelCount(5);
+/// let ciphertext_modulus = CiphertextModulus::new_native();
 ///
 /// // Create the PRNG
 /// let mut seeder = new_seeder();
@@ -193,6 +198,7 @@ where
 ///     input_lwe_dimension,
 ///     output_lwe_dimension,
 ///     seeder.seed().into(),
+///     ciphertext_modulus,
 /// );
 ///
 /// generate_seeded_lwe_keyswitch_key(
@@ -291,6 +297,7 @@ pub fn allocate_and_generate_new_seeded_lwe_keyswitch_key<
     decomp_base_log: DecompositionBaseLog,
     decomp_level_count: DecompositionLevelCount,
     noise_parameters: impl DispersionParameter,
+    ciphertext_modulus: CiphertextModulus<Scalar>,
     noise_seeder: &mut NoiseSeeder,
 ) -> SeededLweKeyswitchKeyOwned<Scalar>
 where
@@ -307,6 +314,7 @@ where
         input_lwe_sk.lwe_dimension(),
         output_lwe_sk.lwe_dimension(),
         noise_seeder.seed().into(),
+        ciphertext_modulus,
     );
 
     generate_seeded_lwe_keyswitch_key(
@@ -365,6 +373,7 @@ mod test {
                 decomp_level_count,
                 input_lwe_dimension,
                 output_lwe_dimension,
+                CiphertextModulus::new_native(),
             );
 
             let mut deterministic_seeder =
@@ -390,6 +399,7 @@ mod test {
                 input_lwe_dimension,
                 output_lwe_dimension,
                 mask_seed.into(),
+                ksk.ciphertext_modulus(),
             );
 
             let mut deterministic_seeder =

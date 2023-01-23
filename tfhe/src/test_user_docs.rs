@@ -22,9 +22,3 @@ doctest!(
     core_crypto_presentation
 );
 doctest!("../docs/core_crypto/tutorial.md", core_crypto_turorial);
-
-// doctest!("../docs/tutorials/serialization.md", serialization_tuto);
-// doctest!(
-//     "../docs/tutorials/circuit_evaluation.md",
-//     circuit_evaluation
-// );

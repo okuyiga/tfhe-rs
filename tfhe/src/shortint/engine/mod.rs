@@ -13,6 +13,7 @@ use crate::core_crypto::commons::parameters::*;
 use crate::core_crypto::entities::*;
 use crate::core_crypto::seeders::new_seeder;
 use crate::shortint::ciphertext::Degree;
+use crate::shortint::parameters::CiphertextModulus;
 use crate::shortint::server_key::Accumulator;
 use crate::shortint::ServerKey;
 use std::cell::RefCell;
@@ -227,6 +228,7 @@ impl ShortintEngine {
     pub fn buffers_for_key(
         &mut self,
         server_key: &ServerKey,
+        ciphertext_modulus: CiphertextModulus,
     ) -> (&mut Buffers, &mut ComputationBuffers) {
         let key = server_key.key_id();
         // To make borrow checker happy
@@ -245,6 +247,7 @@ impl ShortintEngine {
                     .output_key_lwe_dimension()
                     .to_lwe_size(),
                 zero_plaintext,
+                ciphertext_modulus,
             );
 
             Buffers {

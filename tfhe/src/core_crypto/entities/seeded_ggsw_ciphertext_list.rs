@@ -274,7 +274,7 @@ impl<C: Container> ContiguousEntityContainer for SeededGgswCiphertextList<C> {
     where
         Self: 'this;
 
-    fn get_entity_view_creation_metadata(&self) -> SeededGgswCiphertextCreationMetadata {
+    fn get_entity_view_creation_metadata(&self) -> Self::EntityViewMetadata {
         SeededGgswCiphertextCreationMetadata(
             self.glwe_size,
             self.polynomial_size,
@@ -293,7 +293,7 @@ impl<C: Container> ContiguousEntityContainer for SeededGgswCiphertextList<C> {
 
     /// Unimplemented for [`SeededGgswCiphertextList`]. At the moment it does not make sense to
     /// return "sub" seeded lists.
-    fn get_self_view_creation_metadata(&self) {
+    fn get_self_view_creation_metadata(&self) -> Self::SelfViewMetadata {
         unimplemented!(
             "This function is not supported for SeededGgswCiphertextList. \
         At the moment it does not make sense to return 'sub' seeded lists."

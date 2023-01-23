@@ -6,7 +6,7 @@ use crate::core_crypto::fft_impl::math::fft::Fft;
 use crate::shortint::ciphertext::Degree;
 use crate::shortint::engine::EngineResult;
 use crate::shortint::server_key::{Accumulator, MaxDegree};
-use crate::shortint::{Ciphertext, ClientKey, CompressedServerKey, ServerKey};
+use crate::shortint::{Ciphertext, CiphertextModulus, ClientKey, CompressedServerKey, ServerKey};
 use std::cmp::min;
 
 mod add;
@@ -79,6 +79,7 @@ impl ShortintEngine {
             cks.parameters.ks_base_log,
             cks.parameters.ks_level,
             cks.parameters.lwe_modular_std_dev,
+            cks.parameters.ciphertext_modulus,
             &mut self.encryption_generator,
         );
 
@@ -89,6 +90,7 @@ impl ShortintEngine {
             message_modulus: cks.parameters.message_modulus,
             carry_modulus: cks.parameters.carry_modulus,
             max_degree,
+            ciphertext_modulus: cks.parameters.ciphertext_modulus,
         })
     }
 
@@ -136,6 +138,7 @@ impl ShortintEngine {
             cks.parameters.ks_base_log,
             cks.parameters.ks_level,
             cks.parameters.lwe_modular_std_dev,
+            cks.parameters.ciphertext_modulus,
             &mut self.seeder,
         );
 
@@ -146,6 +149,7 @@ impl ShortintEngine {
             message_modulus: cks.parameters.message_modulus,
             carry_modulus: cks.parameters.carry_modulus,
             max_degree,
+            ciphertext_modulus: cks.parameters.ciphertext_modulus,
         })
     }
 
@@ -176,7 +180,8 @@ impl ShortintEngine {
         ct: &mut Ciphertext,
     ) -> EngineResult<()> {
         // Compute the programmable bootstrapping with fixed test polynomial
-        let (ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
+        let (ciphertext_buffers, buffers) =
+            self.buffers_for_key(server_key, ct.ct.ciphertext_modulus());
 
         // Compute a keyswitch
         keyswitch_lwe_ciphertext(
@@ -231,7 +236,8 @@ impl ShortintEngine {
         acc: &Accumulator,
     ) -> EngineResult<()> {
         // Compute the programmable bootstrapping with fixed test polynomial
-        let (ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
+        let (ciphertext_buffers, buffers) =
+            self.buffers_for_key(server_key, ct.ct.ciphertext_modulus());
 
         // Compute a key switch
         keyswitch_lwe_ciphertext(
@@ -468,6 +474,7 @@ impl ShortintEngine {
         &mut self,
         server_key: &ServerKey,
         value: u64,
+        ciphertext_modulus: CiphertextModulus,
     ) -> EngineResult<Ciphertext> {
         let lwe_size = server_key
             .bootstrapping_key
@@ -483,7 +490,11 @@ impl ShortintEngine {
 
         let encoded = Plaintext(shifted_value);
 
-        let ct = allocate_and_trivially_encrypt_new_lwe_ciphertext(lwe_size, encoded);
+        let ct = allocate_and_trivially_encrypt_new_lwe_ciphertext(
+            lwe_size,
+            encoded,
+            ciphertext_modulus,
+        );
 
         let degree = Degree(modular_value);
 

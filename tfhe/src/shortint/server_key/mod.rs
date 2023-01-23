@@ -26,7 +26,7 @@ use crate::core_crypto::fft_impl::crypto::bootstrap::FourierLweBootstrapKeyOwned
 use crate::shortint::ciphertext::{Ciphertext, Degree};
 use crate::shortint::client_key::ClientKey;
 use crate::shortint::engine::ShortintEngine;
-use crate::shortint::parameters::{CarryModulus, MessageModulus};
+use crate::shortint::parameters::{CarryModulus, CiphertextModulus, MessageModulus};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
@@ -66,6 +66,8 @@ pub struct ServerKey {
     pub carry_modulus: CarryModulus,
     // Maximum number of operations that can be done before emptying the operation buffer
     pub max_degree: MaxDegree,
+    // Modulus use for computations on the ciphertext
+    pub ciphertext_modulus: CiphertextModulus,
 }
 
 pub struct Accumulator {
@@ -535,7 +537,11 @@ impl ServerKey {
     /// assert_eq!(1, ct_res);
     /// ```
     pub fn create_trivial(&self, value: u64) -> Ciphertext {
-        ShortintEngine::with_thread_local_mut(|engine| engine.create_trivial(self, value).unwrap())
+        ShortintEngine::with_thread_local_mut(|engine| {
+            engine
+                .create_trivial(self, value, self.ciphertext_modulus)
+                .unwrap()
+        })
     }
 
     pub fn create_trivial_assign(&self, ct: &mut Ciphertext, value: u64) {
@@ -569,6 +575,7 @@ impl From<CompressedServerKey> for ServerKey {
             message_modulus,
             carry_modulus,
             max_degree,
+            ciphertext_modulus,
         } = compressed_server_key;
 
         let key_switching_key = key_switching_key.decompress_into_lwe_keyswitch_key();
@@ -593,6 +600,7 @@ impl From<CompressedServerKey> for ServerKey {
             message_modulus,
             carry_modulus,
             max_degree,
+            ciphertext_modulus,
         }
     }
 }

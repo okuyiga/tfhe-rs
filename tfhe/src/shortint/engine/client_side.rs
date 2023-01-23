@@ -80,6 +80,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.encryption_generator,
         );
 
@@ -119,6 +120,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.seeder,
         );
 
@@ -146,6 +148,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.encryption_generator,
         );
 
@@ -206,6 +209,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.encryption_generator,
         );
 
@@ -236,6 +240,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.seeder,
         );
 
@@ -296,6 +301,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.encryption_generator,
         );
 
@@ -323,6 +329,7 @@ impl ShortintEngine {
             &client_key.lwe_secret_key,
             encoded,
             client_key.parameters.lwe_modular_std_dev,
+            client_key.parameters.ciphertext_modulus,
             &mut self.seeder,
         );
 

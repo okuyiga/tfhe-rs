@@ -46,6 +46,7 @@ macro_rules! modular_distance {
     };
 }
 
+pub mod ciphertext_modulus;
 pub mod computation_buffers;
 pub mod dispersion;
 pub mod generators;

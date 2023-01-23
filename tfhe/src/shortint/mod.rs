@@ -60,7 +60,7 @@ pub mod wopbs;
 
 pub use ciphertext::{Ciphertext, CompressedCiphertext};
 pub use client_key::ClientKey;
-pub use parameters::Parameters;
+pub use parameters::{CarryModulus, CiphertextModulus, MessageModulus, Parameters};
 pub use public_key::{CompressedPublicKey, PublicKey};
 pub use server_key::{CheckError, CompressedServerKey, ServerKey};
 
