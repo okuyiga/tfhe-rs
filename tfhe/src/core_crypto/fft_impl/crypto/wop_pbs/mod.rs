@@ -56,16 +56,21 @@ pub fn extract_bits_scratch<Scalar>(
 /// Output bits are ordered from the MSB to the LSB. Each one of them is output in a distinct LWE
 /// ciphertext, containing the encryption of the bit scaled by q/2 (i.e., the most significant bit
 /// in the plaintext representation).
-pub fn extract_bits<Scalar: UnsignedTorus + CastInto<usize>>(
-    mut lwe_list_out: LweCiphertextList<&'_ mut [Scalar]>,
-    lwe_in: LweCiphertext<&'_ [Scalar]>,
-    ksk: LweKeyswitchKey<&'_ [Scalar]>,
+pub fn extract_bits<Scalar: UnsignedTorus + CastInto<usize>, const Q: u128>(
+    mut lwe_list_out: LweCiphertextList<&'_ mut [Scalar], Q>,
+    lwe_in: LweCiphertext<&'_ [Scalar], Q>,
+    ksk: LweKeyswitchKey<&'_ [Scalar], Q>,
     fourier_bsk: FourierLweBootstrapKeyView<'_>,
     delta_log: DeltaLog,
     number_of_bits_to_extract: ExtractedBitsCount,
     fft: FftView<'_>,
     stack: DynStack<'_>,
 ) {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
+
     let ciphertext_n_bits = Scalar::BITS;
     let number_of_bits_to_extract = number_of_bits_to_extract.0;
 
@@ -111,11 +116,11 @@ pub fn extract_bits<Scalar: UnsignedTorus + CastInto<usize>>(
 
     let (mut lwe_in_buffer_data, stack) =
         stack.collect_aligned(align, lwe_in.as_ref().iter().copied());
-    let mut lwe_in_buffer = LweCiphertext::from_container(&mut *lwe_in_buffer_data);
+    let mut lwe_in_buffer = LweCiphertext::<_, Q>::from_container(&mut *lwe_in_buffer_data);
 
     let (mut lwe_out_ks_buffer_data, stack) =
         stack.make_aligned_with(ksk.output_lwe_size().0, align, |_| Scalar::ZERO);
-    let mut lwe_out_ks_buffer = LweCiphertext::from_container(&mut *lwe_out_ks_buffer_data);
+    let mut lwe_out_ks_buffer = LweCiphertext::<_, Q>::from_container(&mut *lwe_out_ks_buffer_data);
 
     let (mut pbs_accumulator_data, stack) =
         stack.make_aligned_with(glwe_size.0 * polynomial_size.0, align, |_| Scalar::ZERO);
@@ -175,8 +180,8 @@ pub fn extract_bits<Scalar: UnsignedTorus + CastInto<usize>>(
         }
 
         fourier_bsk.bootstrap(
-            lwe_out_pbs_buffer.as_mut(),
-            lwe_out_ks_buffer.as_ref(),
+            lwe_out_pbs_buffer.as_mut_view(),
+            lwe_out_ks_buffer.as_view(),
             pbs_accumulator.as_view(),
             fft,
             stack.rb_mut(),
@@ -210,15 +215,20 @@ pub fn circuit_bootstrap_boolean_scratch<Scalar>(
 ///
 /// The output GGSW ciphertext `ggsw_out` decomposition base log and level count are used as the
 /// circuit_bootstrap_boolean decomposition base log and level count.
-pub fn circuit_bootstrap_boolean<Scalar: UnsignedTorus + CastInto<usize>>(
+pub fn circuit_bootstrap_boolean<Scalar: UnsignedTorus + CastInto<usize>, const Q: u128>(
     fourier_bsk: FourierLweBootstrapKeyView<'_>,
-    lwe_in: LweCiphertext<&[Scalar]>,
+    lwe_in: LweCiphertext<&[Scalar], Q>,
     mut ggsw_out: GgswCiphertext<&mut [Scalar]>,
     delta_log: DeltaLog,
     pfpksk_list: LwePrivateFunctionalPackingKeyswitchKeyList<&[Scalar]>,
     fft: FftView<'_>,
     stack: DynStack<'_>,
 ) {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
+
     let level_cbs = ggsw_out.decomposition_level_count();
     let base_log_cbs = ggsw_out.decomposition_base_log();
 
@@ -329,16 +339,21 @@ pub fn homomorphic_shift_boolean_scratch<Scalar>(
 ///
 /// Starts by shifting the message bit at bit #delta_log to the padding bit and then shifts it to
 /// the right by base_log * level.
-pub fn homomorphic_shift_boolean<Scalar: UnsignedTorus + CastInto<usize>>(
+pub fn homomorphic_shift_boolean<Scalar: UnsignedTorus + CastInto<usize>, const Q: u128>(
     fourier_bsk: FourierLweBootstrapKeyView<'_>,
-    mut lwe_out: LweCiphertext<&mut [Scalar]>,
-    lwe_in: LweCiphertext<&[Scalar]>,
+    mut lwe_out: LweCiphertext<&mut [Scalar], Q>,
+    lwe_in: LweCiphertext<&[Scalar], Q>,
     level_count_cbs: DecompositionLevelCount,
     base_log_cbs: DecompositionBaseLog,
     delta_log: DeltaLog,
     fft: FftView<'_>,
     stack: DynStack<'_>,
 ) {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
+
     let ciphertext_n_bits = Scalar::BITS;
     let lwe_in_size = lwe_in.lwe_size();
     let polynomial_size = fourier_bsk.polynomial_size();
@@ -379,8 +394,8 @@ pub fn homomorphic_shift_boolean<Scalar: UnsignedTorus + CastInto<usize>>(
     // Applying a negacyclic LUT on a ciphertext with one bit of message in the MSB and no bit
     // of padding
     fourier_bsk.bootstrap(
-        lwe_out.as_mut(),
-        lwe_left_shift_buffer.as_ref(),
+        lwe_out.as_mut_view(),
+        lwe_left_shift_buffer.as_view(),
         pbs_accumulator.as_view(),
         fft,
         stack,
@@ -803,11 +818,14 @@ pub fn circuit_bootstrap_boolean_vertical_packing_scratch<Scalar>(
 /// The circuit bootstrapping uses the private functional packing key switch.
 ///
 /// This is supposed to be used only with boolean (1 bit of message) LWE ciphertexts.
-pub fn circuit_bootstrap_boolean_vertical_packing<Scalar: UnsignedTorus + CastInto<usize>>(
+pub fn circuit_bootstrap_boolean_vertical_packing<
+    Scalar: UnsignedTorus + CastInto<usize>,
+    const Q: u128,
+>(
     big_lut_as_polynomial_list: PolynomialList<&[Scalar]>,
     fourier_bsk: FourierLweBootstrapKeyView<'_>,
-    mut lwe_list_out: LweCiphertextList<&mut [Scalar]>,
-    lwe_list_in: LweCiphertextList<&[Scalar]>,
+    mut lwe_list_out: LweCiphertextList<&mut [Scalar], Q>,
+    lwe_list_in: LweCiphertextList<&[Scalar], Q>,
     pfpksk_list: LwePrivateFunctionalPackingKeyswitchKeyList<&[Scalar]>,
     level_cbs: DecompositionLevelCount,
     base_log_cbs: DecompositionBaseLog,
@@ -934,13 +952,18 @@ pub fn vertical_packing_scratch<Scalar>(
 }
 
 // GGSW ciphertexts are stored from the msb (vec_ggsw[0]) to the lsb (vec_ggsw[last])
-pub fn vertical_packing<Scalar: UnsignedTorus + CastInto<usize>>(
+pub fn vertical_packing<Scalar: UnsignedTorus + CastInto<usize>, const Q: u128>(
     lut: PolynomialList<&[Scalar]>,
-    mut lwe_out: LweCiphertext<&mut [Scalar]>,
+    mut lwe_out: LweCiphertext<&mut [Scalar], Q>,
     ggsw_list: FourierGgswCiphertextListView<'_>,
     fft: FftView<'_>,
     stack: DynStack<'_>,
 ) {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
+
     let polynomial_size = ggsw_list.polynomial_size();
     let glwe_size = ggsw_list.glwe_size();
     let glwe_dimension = glwe_size.to_glwe_dimension();

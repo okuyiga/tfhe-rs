@@ -136,6 +136,7 @@ implement!(u16, i16, 16);
 implement!(u32, i32, 32);
 implement!(u64, i64, 64);
 implement!(u128, i128, 128);
+implement!(usize, isize, usize::BITS as usize);
 
 #[cfg(test)]
 mod test {

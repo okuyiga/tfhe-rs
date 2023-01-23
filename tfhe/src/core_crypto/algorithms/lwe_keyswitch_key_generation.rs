@@ -60,14 +60,21 @@ use crate::core_crypto::entities::*;
 ///
 /// assert!(ksk.as_ref().iter().all(|&x| x == 0) == false);
 /// ```
-pub fn generate_lwe_keyswitch_key<Scalar, InputKeyCont, OutputKeyCont, KSKeyCont, Gen>(
+pub fn generate_lwe_keyswitch_key<
+    Scalar,
+    InputKeyCont,
+    OutputKeyCont,
+    KSKeyCont,
+    Gen,
+    const Q: u128,
+>(
     input_lwe_sk: &LweSecretKey<InputKeyCont>,
     output_lwe_sk: &LweSecretKey<OutputKeyCont>,
-    lwe_keyswitch_key: &mut LweKeyswitchKey<KSKeyCont>,
+    lwe_keyswitch_key: &mut LweKeyswitchKey<KSKeyCont, Q>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: Container<Element = Scalar>,
     KSKeyCont: ContainerMut<Element = Scalar>,
@@ -124,16 +131,22 @@ pub fn generate_lwe_keyswitch_key<Scalar, InputKeyCont, OutputKeyCont, KSKeyCont
 /// key constructed from an input and an output key [`LWE secret key`](`LweSecretKey`).
 ///
 /// See [`keyswitch_lwe_ciphertext`] for usage.
-pub fn allocate_and_generate_new_lwe_keyswitch_key<Scalar, InputKeyCont, OutputKeyCont, Gen>(
+pub fn allocate_and_generate_new_lwe_keyswitch_key<
+    Scalar,
+    InputKeyCont,
+    OutputKeyCont,
+    Gen,
+    const Q: u128,
+>(
     input_lwe_sk: &LweSecretKey<InputKeyCont>,
     output_lwe_sk: &LweSecretKey<OutputKeyCont>,
     decomp_base_log: DecompositionBaseLog,
     decomp_level_count: DecompositionLevelCount,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
-) -> LweKeyswitchKeyOwned<Scalar>
+) -> LweKeyswitchKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: Container<Element = Scalar>,
     Gen: ByteRandomGenerator,
@@ -211,14 +224,15 @@ pub fn generate_seeded_lwe_keyswitch_key<
     OutputKeyCont,
     KSKeyCont,
     NoiseSeeder,
+    const Q: u128,
 >(
     input_lwe_sk: &LweSecretKey<InputKeyCont>,
     output_lwe_sk: &LweSecretKey<OutputKeyCont>,
-    lwe_keyswitch_key: &mut SeededLweKeyswitchKey<KSKeyCont>,
+    lwe_keyswitch_key: &mut SeededLweKeyswitchKey<KSKeyCont, Q>,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: Container<Element = Scalar>,
     KSKeyCont: ContainerMut<Element = Scalar>,
@@ -285,6 +299,7 @@ pub fn allocate_and_generate_new_seeded_lwe_keyswitch_key<
     InputKeyCont,
     OutputKeyCont,
     NoiseSeeder,
+    const Q: u128,
 >(
     input_lwe_sk: &LweSecretKey<InputKeyCont>,
     output_lwe_sk: &LweSecretKey<OutputKeyCont>,
@@ -292,9 +307,9 @@ pub fn allocate_and_generate_new_seeded_lwe_keyswitch_key<
     decomp_level_count: DecompositionLevelCount,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
-) -> SeededLweKeyswitchKeyOwned<Scalar>
+) -> SeededLweKeyswitchKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: Container<Element = Scalar>,
     // Maybe Sized allows to pass Box<dyn Seeder>.
@@ -328,7 +343,10 @@ mod test {
     use crate::core_crypto::commons::math::random::ActivatedRandomGenerator;
     use crate::core_crypto::prelude::*;
 
-    fn test_seeded_lwe_ksk_gen_equivalence<Scalar: UnsignedTorus>() {
+    fn test_seeded_lwe_ksk_gen_equivalence<
+        Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
+        const Q: u128,
+    >() {
         // DISCLAIMER: these toy example parameters are not guaranteed to be secure or yield correct
         // computations
         // Define parameters for LweKeyswitchKey creation
@@ -359,7 +377,7 @@ mod test {
                 &mut secret_generator,
             );
 
-            let mut ksk = LweKeyswitchKey::new(
+            let mut ksk = LweKeyswitchKey::<_, Q>::new(
                 Scalar::ZERO,
                 decomp_base_log,
                 decomp_level_count,
@@ -411,11 +429,11 @@ mod test {
 
     #[test]
     fn test_seeded_lwe_ksk_gen_equivalence_u32() {
-        test_seeded_lwe_ksk_gen_equivalence::<u32>()
+        test_seeded_lwe_ksk_gen_equivalence::<u32, NATIVE_32_BITS_MODULUS>()
     }
 
     #[test]
     fn test_seeded_lwe_ksk_gen_equivalence_u64() {
-        test_seeded_lwe_ksk_gen_equivalence::<u64>()
+        test_seeded_lwe_ksk_gen_equivalence::<u64, NATIVE_64_BITS_MODULUS>()
     }
 }

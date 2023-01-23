@@ -21,25 +21,25 @@ use crate::core_crypto::entities::*;
 /// $\vec{s}\in\mathbb{Z}\_q^n$ where $n$ is the LWE dimension of the ciphertexts contained in the
 /// public key.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct LwePublicKey<C: Container> {
-    lwe_list: LweCiphertextList<C>,
+pub struct LwePublicKey<C: Container, const Q: u128> {
+    lwe_list: LweCiphertextList<C, Q>,
 }
 
-impl<C: Container> std::ops::Deref for LwePublicKey<C> {
-    type Target = LweCiphertextList<C>;
+impl<C: Container, const Q: u128> std::ops::Deref for LwePublicKey<C, Q> {
+    type Target = LweCiphertextList<C, Q>;
 
-    fn deref(&self) -> &LweCiphertextList<C> {
+    fn deref(&self) -> &LweCiphertextList<C, Q> {
         &self.lwe_list
     }
 }
 
-impl<C: ContainerMut> std::ops::DerefMut for LwePublicKey<C> {
-    fn deref_mut(&mut self) -> &mut LweCiphertextList<C> {
+impl<C: ContainerMut, const Q: u128> std::ops::DerefMut for LwePublicKey<C, Q> {
+    fn deref_mut(&mut self) -> &mut LweCiphertextList<C, Q> {
         &mut self.lwe_list
     }
 }
 
-impl<Scalar, C: Container<Element = Scalar>> LwePublicKey<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> LwePublicKey<C, Q> {
     /// Create an [`LwePublicKey`] from an existing container.
     ///
     /// # Note
@@ -82,7 +82,7 @@ impl<Scalar, C: Container<Element = Scalar>> LwePublicKey<C> {
     ///     zero_encryption_count
     /// );
     /// ```
-    pub fn from_container(container: C, lwe_size: LweSize) -> LwePublicKey<C> {
+    pub fn from_container(container: C, lwe_size: LweSize) -> LwePublicKey<C, Q> {
         assert!(
             container.container_len() > 0,
             "Got an empty container to create an LwePublicKey"
@@ -108,23 +108,30 @@ impl<Scalar, C: Container<Element = Scalar>> LwePublicKey<C> {
 
     /// Return a view of the [`LwePublicKey`]. This is useful if an algorithm takes a view by
     /// value.
-    pub fn as_view(&self) -> LwePublicKey<&'_ [Scalar]> {
+    pub fn as_view(&self) -> LwePublicKey<&'_ [Scalar], Q> {
         LwePublicKey::from_container(self.as_ref(), self.lwe_size())
+    }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
     }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> LwePublicKey<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> LwePublicKey<C, Q> {
     /// Mutable variant of [`LwePublicKey::as_view`].
-    pub fn as_mut_view(&mut self) -> LwePublicKey<&'_ mut [Scalar]> {
+    pub fn as_mut_view(&mut self) -> LwePublicKey<&'_ mut [Scalar], Q> {
         let lwe_size = self.lwe_size();
         LwePublicKey::from_container(self.as_mut(), lwe_size)
     }
 }
 
 /// An [`LwePublicKey`] owning the memory for its own storage.
-pub type LwePublicKeyOwned<Scalar> = LwePublicKey<Vec<Scalar>>;
+pub type LwePublicKeyOwned<Scalar, const Q: u128> = LwePublicKey<Vec<Scalar>, Q>;
 
-impl<Scalar: Copy> LwePublicKeyOwned<Scalar> {
+pub type LwePublicKey32 = LwePublicKey<Vec<u32>, NATIVE_32_BITS_MODULUS>;
+pub type LwePublicKey64 = LwePublicKey<Vec<u64>, NATIVE_64_BITS_MODULUS>;
+
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> LwePublicKeyOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`LwePublicKey`].
     ///
     /// # Note
@@ -138,7 +145,12 @@ impl<Scalar: Copy> LwePublicKeyOwned<Scalar> {
         fill_with: Scalar,
         lwe_size: LweSize,
         zero_encryption_count: LwePublicKeyZeroEncryptionCount,
-    ) -> LwePublicKeyOwned<Scalar> {
+    ) -> LwePublicKeyOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         LwePublicKeyOwned::from_container(
             vec![fill_with; lwe_size.0 * zero_encryption_count.0],
             lwe_size,

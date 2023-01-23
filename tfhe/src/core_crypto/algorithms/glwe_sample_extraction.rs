@@ -2,6 +2,7 @@
 //! _sample extract_ in the literature. Allowing to extract a single
 //! [`LWE Ciphertext`](`LweCiphertext`) from a given [`GLWE ciphertext`](`GlweCiphertext`).
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::algorithms::slice_algorithms::*;
 use crate::core_crypto::commons::numeric::UnsignedInteger;
 use crate::core_crypto::commons::parameters::{MonomialDegree, *};
@@ -82,15 +83,19 @@ use crate::core_crypto::entities::*;
 /// // GlweCiphertext
 /// assert_eq!(special_value, recovered_message);
 /// ```
-pub fn extract_lwe_sample_from_glwe_ciphertext<Scalar, InputCont, OutputCont>(
+pub fn extract_lwe_sample_from_glwe_ciphertext<Scalar, InputCont, OutputCont, const Q: u128>(
     input_glwe: &GlweCiphertext<InputCont>,
-    output_lwe: &mut LweCiphertext<OutputCont>,
+    output_lwe: &mut LweCiphertext<OutputCont, Q>,
     nth: MonomialDegree,
 ) where
     Scalar: UnsignedInteger,
     InputCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     assert!(
         input_glwe.glwe_size().to_glwe_dimension().0 * input_glwe.polynomial_size().0
             == output_lwe.lwe_size().to_lwe_dimension().0,

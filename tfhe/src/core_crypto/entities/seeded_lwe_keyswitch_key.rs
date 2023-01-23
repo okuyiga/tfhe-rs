@@ -8,7 +8,7 @@ use crate::core_crypto::entities::*;
 
 /// A [`seeded LWE keyswitch key`](`SeededLweKeyswitchKey`).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SeededLweKeyswitchKey<C: Container> {
+pub struct SeededLweKeyswitchKey<C: Container, const Q: u128> {
     data: C,
     decomp_base_log: DecompositionBaseLog,
     decomp_level_count: DecompositionLevelCount,
@@ -16,13 +16,13 @@ pub struct SeededLweKeyswitchKey<C: Container> {
     compression_seed: CompressionSeed,
 }
 
-impl<T, C: Container<Element = T>> AsRef<[T]> for SeededLweKeyswitchKey<C> {
+impl<T, C: Container<Element = T>, const Q: u128> AsRef<[T]> for SeededLweKeyswitchKey<C, Q> {
     fn as_ref(&self) -> &[T] {
         self.data.as_ref()
     }
 }
 
-impl<T, C: ContainerMut<Element = T>> AsMut<[T]> for SeededLweKeyswitchKey<C> {
+impl<T, C: ContainerMut<Element = T>, const Q: u128> AsMut<[T]> for SeededLweKeyswitchKey<C, Q> {
     fn as_mut(&mut self) -> &mut [T] {
         self.data.as_mut()
     }
@@ -37,7 +37,7 @@ pub fn seeded_lwe_keyswitch_key_input_key_element_encrypted_size(
     decomp_level_count.0
 }
 
-impl<Scalar, C: Container<Element = Scalar>> SeededLweKeyswitchKey<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> SeededLweKeyswitchKey<C, Q> {
     /// Create an [`SeededLweKeyswitchKey`] from an existing container.
     ///
     /// # Note
@@ -196,7 +196,7 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweKeyswitchKey<C> {
 
     /// Return a view of the [`SeededLweKeyswitchKey`]. This is useful if an algorithm takes a view
     /// by value.
-    pub fn as_view(&self) -> SeededLweKeyswitchKey<&'_ [Scalar]> {
+    pub fn as_view(&self) -> SeededLweKeyswitchKey<&'_ [Scalar], Q> {
         SeededLweKeyswitchKey::from_container(
             self.as_ref(),
             self.decomp_base_log,
@@ -217,7 +217,7 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweKeyswitchKey<C> {
     /// [`LweKeyswitchKey`].
     ///
     /// See [`SeededLweKeyswitchKey::from_container`] for usage.
-    pub fn decompress_into_lwe_keyswitch_key(self) -> LweKeyswitchKeyOwned<Scalar>
+    pub fn decompress_into_lwe_keyswitch_key(self) -> LweKeyswitchKeyOwned<Scalar, Q>
     where
         Scalar: UnsignedTorus,
     {
@@ -228,25 +228,29 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweKeyswitchKey<C> {
             self.input_key_lwe_dimension(),
             self.output_key_lwe_dimension(),
         );
-        decompress_seeded_lwe_keyswitch_key::<_, _, _, ActivatedRandomGenerator>(
+        decompress_seeded_lwe_keyswitch_key::<_, _, _, ActivatedRandomGenerator, Q>(
             &mut decompressed_ksk,
             &self,
         );
         decompressed_ksk
     }
 
-    pub fn as_seeded_lwe_ciphertext_list(&self) -> SeededLweCiphertextListView<'_, Scalar> {
+    pub fn as_seeded_lwe_ciphertext_list(&self) -> SeededLweCiphertextListView<'_, Scalar, Q> {
         SeededLweCiphertextListView::from_container(
             self.as_ref(),
             self.output_lwe_size(),
             self.compression_seed(),
         )
     }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLweKeyswitchKey<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> SeededLweKeyswitchKey<C, Q> {
     /// Mutable variant of [`SeededLweKeyswitchKey::as_view`].
-    pub fn as_mut_view(&mut self) -> SeededLweKeyswitchKey<&'_ mut [Scalar]> {
+    pub fn as_mut_view(&mut self) -> SeededLweKeyswitchKey<&'_ mut [Scalar], Q> {
         let decomp_base_log = self.decomp_base_log;
         let decomp_level_count = self.decomp_level_count;
         let output_lwe_size = self.output_lwe_size;
@@ -262,7 +266,7 @@ impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLweKeyswitchKey<C> {
 
     pub fn as_mut_seeded_lwe_ciphertext_list(
         &mut self,
-    ) -> SeededLweCiphertextListMutView<'_, Scalar> {
+    ) -> SeededLweCiphertextListMutView<'_, Scalar, Q> {
         let output_lwe_size = self.output_lwe_size();
         let compression_seed = self.compression_seed();
         SeededLweCiphertextListMutView::from_container(
@@ -274,9 +278,12 @@ impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLweKeyswitchKey<C> {
 }
 
 /// An [`SeededLweKeyswitchKey`] owning the memory for its own storage.
-pub type SeededLweKeyswitchKeyOwned<Scalar> = SeededLweKeyswitchKey<Vec<Scalar>>;
+pub type SeededLweKeyswitchKeyOwned<Scalar, const Q: u128> = SeededLweKeyswitchKey<Vec<Scalar>, Q>;
 
-impl<Scalar: Copy> SeededLweKeyswitchKeyOwned<Scalar> {
+pub type SeededLweKeyswitchKey32 = SeededLweKeyswitchKey<Vec<u32>, NATIVE_32_BITS_MODULUS>;
+pub type SeededLweKeyswitchKey64 = SeededLweKeyswitchKey<Vec<u64>, NATIVE_64_BITS_MODULUS>;
+
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> SeededLweKeyswitchKeyOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`SeededLweKeyswitchKey`].
     ///
     /// # Note
@@ -294,7 +301,12 @@ impl<Scalar: Copy> SeededLweKeyswitchKeyOwned<Scalar> {
         input_key_lwe_dimension: LweDimension,
         output_key_lwe_dimension: LweDimension,
         compression_seed: CompressionSeed,
-    ) -> SeededLweKeyswitchKeyOwned<Scalar> {
+    ) -> SeededLweKeyswitchKeyOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         SeededLweKeyswitchKeyOwned::from_container(
             vec![
                 fill_with;
@@ -309,12 +321,12 @@ impl<Scalar: Copy> SeededLweKeyswitchKeyOwned<Scalar> {
     }
 }
 
-impl<C: Container> ContiguousEntityContainer for SeededLweKeyswitchKey<C> {
+impl<C: Container, const Q: u128> ContiguousEntityContainer for SeededLweKeyswitchKey<C, Q> {
     type Element = C::Element;
 
     type EntityViewMetadata = SeededLweCiphertextListCreationMetadata;
 
-    type EntityView<'this> = SeededLweCiphertextListView<'this, Self::Element>
+    type EntityView<'this> = SeededLweCiphertextListView<'this, Self::Element, Q>
     where
         Self: 'this;
 
@@ -344,8 +356,8 @@ impl<C: Container> ContiguousEntityContainer for SeededLweKeyswitchKey<C> {
     }
 }
 
-impl<C: ContainerMut> ContiguousEntityContainerMut for SeededLweKeyswitchKey<C> {
-    type EntityMutView<'this> = SeededLweCiphertextListMutView<'this, Self::Element>
+impl<C: ContainerMut, const Q: u128> ContiguousEntityContainerMut for SeededLweKeyswitchKey<C, Q> {
+    type EntityMutView<'this> = SeededLweCiphertextListMutView<'this, Self::Element, Q>
     where
         Self: 'this;
 

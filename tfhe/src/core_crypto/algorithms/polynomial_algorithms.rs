@@ -411,7 +411,7 @@ pub fn polynomial_karatsuba_wrapping_mul<Scalar, OutputCont, LhsCont, RhsCont>(
     let poly_size = output.polynomial_size().0;
 
     // check dimensions are a power of 2
-    assert!(is_power_of_two::<u32>(poly_size.try_into().unwrap()));
+    assert!(is_power_of_two(poly_size));
 
     // allocate slices for the rec
     let mut a0 = vec![Scalar::ZERO; poly_size];

@@ -5,14 +5,14 @@ use crate::core_crypto::commons::traits::*;
 
 /// A convenience structure to easily manipulate the body of an [`LweCiphertext`].
 #[derive(Clone, Debug)]
-pub struct LweBody<T>(pub T);
+pub struct LweBody<T, const Q: u128>(pub T);
 #[derive(Clone, Debug)]
-pub struct LweMask<C: Container> {
+pub struct LweMask<C: Container, const Q: u128> {
     data: C,
 }
 
 /// A convenience structure to easily manipulate the mask of an [`LweCiphertext`].
-impl<C: Container> LweMask<C> {
+impl<C: Container, const Q: u128> LweMask<C, Q> {
     /// Create an [`LweMask`] from an existing container.
     ///
     /// # Note
@@ -41,34 +41,44 @@ impl<C: Container> LweMask<C> {
     pub fn lwe_dimension(&self) -> LweDimension {
         LweDimension(self.data.container_len())
     }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
 }
 
-impl<T, C: Container<Element = T>> AsRef<[T]> for LweMask<C> {
+impl<T, C: Container<Element = T>, const Q: u128> AsRef<[T]> for LweMask<C, Q> {
     fn as_ref(&self) -> &[T] {
         self.data.as_ref()
     }
 }
 
-impl<T, C: ContainerMut<Element = T>> AsMut<[T]> for LweMask<C> {
+impl<T, C: ContainerMut<Element = T>, const Q: u128> AsMut<[T]> for LweMask<C, Q> {
     fn as_mut(&mut self) -> &mut [T] {
         self.data.as_mut()
     }
 }
 
-impl<'data, T> CreateFrom<&'data [T]> for LweBody<&'data T> {
+impl<C: Container, const Q: u128> LweBody<C, Q> {
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
+}
+
+impl<'data, T, const Q: u128> CreateFrom<&'data [T]> for LweBody<&'data T, Q> {
     type Metadata = ();
 
     #[inline]
-    fn create_from(from: &[T], _meta: Self::Metadata) -> LweBody<&'_ T> {
+    fn create_from(from: &[T], _meta: Self::Metadata) -> LweBody<&'_ T, Q> {
         LweBody(&from[0])
     }
 }
 
-impl<'data, T> CreateFrom<&'data mut [T]> for LweBody<&'data mut T> {
+impl<'data, T, const Q: u128> CreateFrom<&'data mut [T]> for LweBody<&'data mut T, Q> {
     type Metadata = ();
 
     #[inline]
-    fn create_from(from: &mut [T], _meta: Self::Metadata) -> LweBody<&'_ mut T> {
+    fn create_from(from: &mut [T], _meta: Self::Metadata) -> LweBody<&'_ mut T, Q> {
         LweBody(&mut from[0])
     }
 }
@@ -126,23 +136,23 @@ impl<'data, T> CreateFrom<&'data mut [T]> for LweBody<&'data mut T> {
 /// **Remark:** Observe that the decryption is followed by a decoding phase that will contain a
 /// rounding.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct LweCiphertext<C: Container> {
+pub struct LweCiphertext<C: Container, const Q: u128> {
     data: C,
 }
 
-impl<T, C: Container<Element = T>> AsRef<[T]> for LweCiphertext<C> {
+impl<T, C: Container<Element = T>, const Q: u128> AsRef<[T]> for LweCiphertext<C, Q> {
     fn as_ref(&self) -> &[T] {
         self.data.as_ref()
     }
 }
 
-impl<T, C: ContainerMut<Element = T>> AsMut<[T]> for LweCiphertext<C> {
+impl<T, C: ContainerMut<Element = T>, const Q: u128> AsMut<[T]> for LweCiphertext<C, Q> {
     fn as_mut(&mut self) -> &mut [T] {
         self.data.as_mut()
     }
 }
 
-impl<Scalar, C: Container<Element = Scalar>> LweCiphertext<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> LweCiphertext<C, Q> {
     /// Create an [`LweCiphertext`] from an existing container.
     ///
     /// # Note
@@ -184,7 +194,7 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertext<C> {
     ///     lwe_size.to_lwe_dimension()
     /// );
     /// ```
-    pub fn from_container(container: C) -> LweCiphertext<C> {
+    pub fn from_container(container: C) -> LweCiphertext<C, Q> {
         assert!(
             container.container_len() > 0,
             "Got an empty container to create an LweCiphertext"
@@ -200,14 +210,14 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertext<C> {
     }
 
     /// Return immutable views to the [`LweMask`] and [`LweBody`] of an [`LweCiphertext`].
-    pub fn get_mask_and_body(&self) -> (LweMask<&[Scalar]>, LweBody<&Scalar>) {
+    pub fn get_mask_and_body(&self) -> (LweMask<&[Scalar], Q>, LweBody<&Scalar, Q>) {
         let (body, mask) = self.data.as_ref().split_last().unwrap();
 
         (LweMask::from_container(mask), LweBody(body))
     }
 
     /// Return an immutable view to the [`LweBody`] of an [`LweCiphertext`].
-    pub fn get_body(&self) -> LweBody<&Scalar> {
+    pub fn get_body(&self) -> LweBody<&Scalar, Q> {
         let body = self.data.as_ref().last().unwrap();
 
         LweBody(body)
@@ -216,13 +226,13 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertext<C> {
     /// Return an immutable view to the [`LweMask`] of an [`LweCiphertext`].
     ///
     /// See [`LweCiphertext::from_container`] for usage.
-    pub fn get_mask(&self) -> LweMask<&[Scalar]> {
+    pub fn get_mask(&self) -> LweMask<&[Scalar], Q> {
         LweMask::from_container(&self.as_ref()[0..self.lwe_size().to_lwe_dimension().0])
     }
 
     /// Return a view of the [`LweCiphertext`]. This is useful if an algorithm takes a view by
     /// value.
-    pub fn as_view(&self) -> LweCiphertextView<'_, Scalar> {
+    pub fn as_view(&self) -> LweCiphertextView<'_, Scalar, Q> {
         LweCiphertextView::from_container(self.as_ref())
     }
 
@@ -232,18 +242,24 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertext<C> {
     pub fn into_container(self) -> C {
         self.data
     }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> LweCiphertext<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> LweCiphertext<C, Q> {
     /// Mutable variant of [`LweCiphertext::get_mask_and_body`].
-    pub fn get_mut_mask_and_body(&mut self) -> (LweMask<&mut [Scalar]>, LweBody<&mut Scalar>) {
+    pub fn get_mut_mask_and_body(
+        &mut self,
+    ) -> (LweMask<&mut [Scalar], Q>, LweBody<&mut Scalar, Q>) {
         let (body, mask) = self.data.as_mut().split_last_mut().unwrap();
 
         (LweMask::from_container(mask), LweBody(body))
     }
 
     /// Mutable variant of [`LweCiphertext::get_body`].
-    pub fn get_mut_body(&mut self) -> LweBody<&mut Scalar> {
+    pub fn get_mut_body(&mut self) -> LweBody<&mut Scalar, Q> {
         let body = self.data.as_mut().last_mut().unwrap();
 
         LweBody(body)
@@ -252,25 +268,34 @@ impl<Scalar, C: ContainerMut<Element = Scalar>> LweCiphertext<C> {
     /// Mutable variant of [`LweCiphertext::get_mask`].
     ///
     /// See [`LweCiphertext::from_container`] for usage.
-    pub fn get_mut_mask(&mut self) -> LweMask<&mut [Scalar]> {
+    pub fn get_mut_mask(&mut self) -> LweMask<&mut [Scalar], Q> {
         let lwe_dimension = self.lwe_size().to_lwe_dimension();
         LweMask::from_container(&mut self.as_mut()[0..lwe_dimension.0])
     }
 
     /// Mutable variant of [`LweCiphertext::as_view`].
-    pub fn as_mut_view(&mut self) -> LweCiphertextMutView<'_, Scalar> {
+    pub fn as_mut_view(&mut self) -> LweCiphertextMutView<'_, Scalar, Q> {
         LweCiphertextMutView::from_container(self.as_mut())
     }
 }
 
 /// An [`LweCiphertext`] owning the memory for its own storage.
-pub type LweCiphertextOwned<Scalar> = LweCiphertext<Vec<Scalar>>;
+pub type LweCiphertextOwned<Scalar, const Q: u128> = LweCiphertext<Vec<Scalar>, Q>;
 /// An [`LweCiphertext`] immutably borrowing memory for its own storage.
-pub type LweCiphertextView<'data, Scalar> = LweCiphertext<&'data [Scalar]>;
+pub type LweCiphertextView<'data, Scalar, const Q: u128> = LweCiphertext<&'data [Scalar], Q>;
 /// An [`LweCiphertext`] mutably borrowing memory for its own storage.
-pub type LweCiphertextMutView<'data, Scalar> = LweCiphertext<&'data mut [Scalar]>;
+pub type LweCiphertextMutView<'data, Scalar, const Q: u128> = LweCiphertext<&'data mut [Scalar], Q>;
 
-impl<Scalar: Copy> LweCiphertextOwned<Scalar> {
+pub const NATIVE_32_BITS_MODULUS: u128 = 4_294_967_296;
+pub const NATIVE_64_BITS_MODULUS: u128 = 18_446_744_073_709_551_616;
+// As we cannot express 2^128 in a 128 bits value we use zero as a special value instead
+pub const NATIVE_128_BITS_MODULUS: u128 = 0;
+
+pub type LweCiphertext32 = LweCiphertext<Vec<u32>, NATIVE_32_BITS_MODULUS>;
+pub type LweCiphertext64 = LweCiphertext<Vec<u64>, NATIVE_64_BITS_MODULUS>;
+pub type LweCiphertext128 = LweCiphertext<Vec<u128>, NATIVE_128_BITS_MODULUS>;
+
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> LweCiphertextOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`LweCiphertext`].
     ///
     /// # Note
@@ -281,7 +306,12 @@ impl<Scalar: Copy> LweCiphertextOwned<Scalar> {
     /// output.
     ///
     /// See [`LweCiphertext::from_container`] for usage.
-    pub fn new(fill_with: Scalar, lwe_size: LweSize) -> LweCiphertextOwned<Scalar> {
+    pub fn new(fill_with: Scalar, lwe_size: LweSize) -> LweCiphertextOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         LweCiphertextOwned::from_container(vec![fill_with; lwe_size.0])
     }
 }
@@ -290,11 +320,11 @@ impl<Scalar: Copy> LweCiphertextOwned<Scalar> {
 #[derive(Clone, Copy)]
 pub struct LweCiphertextCreationMetadata();
 
-impl<C: Container> CreateFrom<C> for LweCiphertext<C> {
+impl<C: Container, const Q: u128> CreateFrom<C> for LweCiphertext<C, Q> {
     type Metadata = LweCiphertextCreationMetadata;
 
     #[inline]
-    fn create_from(from: C, _: Self::Metadata) -> LweCiphertext<C> {
+    fn create_from(from: C, _: Self::Metadata) -> LweCiphertext<C, Q> {
         LweCiphertext::from_container(from)
     }
 }

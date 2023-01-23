@@ -13,7 +13,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// sends it to the server so it can compute homomorphic circuits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompressedServerKey {
-    pub key_switching_key: SeededLweKeyswitchKeyOwned<u64>,
+    pub key_switching_key: SeededLweKeyswitchKey64,
     pub bootstrapping_key: SeededLweBootstrapKeyOwned<u64>,
     // Size of the message buffer
     pub message_modulus: MessageModulus,

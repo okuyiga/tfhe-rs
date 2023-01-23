@@ -1,6 +1,7 @@
 //! Module containing primitives pertaining to [`LWE ciphertext`](`LweCiphertext`) linear algebra,
 //! like addition, multiplication, etc.
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::algorithms::slice_algorithms::*;
 use crate::core_crypto::commons::numeric::UnsignedInteger;
 use crate::core_crypto::commons::traits::*;
@@ -62,15 +63,29 @@ use crate::core_crypto::entities::*;
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg + msg);
 /// ```
-pub fn lwe_ciphertext_add_assign<Scalar, LhsCont, RhsCont>(
-    lhs: &mut LweCiphertext<LhsCont>,
-    rhs: &LweCiphertext<RhsCont>,
+pub fn lwe_ciphertext_add_assign<Scalar, LhsCont, RhsCont, const Q: u128>(
+    lhs: &mut LweCiphertext<LhsCont, Q>,
+    rhs: &LweCiphertext<RhsCont, Q>,
 ) where
-    Scalar: UnsignedInteger,
+    Scalar: UnsignedInteger + CastFrom<u128> + CastInto<u128>,
     LhsCont: ContainerMut<Element = Scalar>,
     RhsCont: Container<Element = Scalar>,
 {
-    slice_wrapping_add_assign(lhs.as_mut(), rhs.as_ref());
+    if is_native_modulus::<Scalar, Q>() {
+        slice_wrapping_add_assign(lhs.as_mut(), rhs.as_ref());
+    } else {
+        let mut ct_128_lhs = LweCiphertext128::new(0u128, lhs.lwe_size());
+
+        copy_from_convert(&mut ct_128_lhs, lhs);
+
+        let mut ct_128_rhs = LweCiphertext128::new(0u128, rhs.lwe_size());
+
+        copy_from_convert(&mut ct_128_rhs, rhs);
+
+        slice_wrapping_add_assign(ct_128_lhs.as_mut(), ct_128_rhs.as_ref());
+
+        copy_from_u128_mod_convert::<_, _, _, Q>(lhs, &ct_128_lhs);
+    }
 }
 
 /// Add the right-hand side [`LWE ciphertext`](`LweCiphertext`) to the left-hand side [`LWE
@@ -132,16 +147,20 @@ pub fn lwe_ciphertext_add_assign<Scalar, LhsCont, RhsCont>(
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg + msg);
 /// ```
-pub fn lwe_ciphertext_add<Scalar, OutputCont, LhsCont, RhsCont>(
-    output: &mut LweCiphertext<OutputCont>,
-    lhs: &LweCiphertext<LhsCont>,
-    rhs: &LweCiphertext<RhsCont>,
+pub fn lwe_ciphertext_add<Scalar, OutputCont, LhsCont, RhsCont, const Q: u128>(
+    output: &mut LweCiphertext<OutputCont, Q>,
+    lhs: &LweCiphertext<LhsCont, Q>,
+    rhs: &LweCiphertext<RhsCont, Q>,
 ) where
     Scalar: UnsignedInteger,
     OutputCont: ContainerMut<Element = Scalar>,
     LhsCont: Container<Element = Scalar>,
     RhsCont: Container<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     slice_wrapping_add(output.as_mut(), lhs.as_ref(), rhs.as_ref());
 }
 
@@ -199,13 +218,17 @@ pub fn lwe_ciphertext_add<Scalar, OutputCont, LhsCont, RhsCont>(
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg + msg);
 /// ```
-pub fn lwe_ciphertext_plaintext_add_assign<Scalar, InCont>(
-    lhs: &mut LweCiphertext<InCont>,
+pub fn lwe_ciphertext_plaintext_add_assign<Scalar, InCont, const Q: u128>(
+    lhs: &mut LweCiphertext<InCont, Q>,
     rhs: Plaintext<Scalar>,
 ) where
     Scalar: UnsignedInteger,
     InCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     let body = lhs.get_mut_body();
 
     *body.0 = (*body.0).wrapping_add(rhs.0);
@@ -264,11 +287,16 @@ pub fn lwe_ciphertext_plaintext_add_assign<Scalar, InCont>(
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg.wrapping_neg() % (1 << 4));
 /// ```
-pub fn lwe_ciphertext_opposite_assign<Scalar, InCont>(ct: &mut LweCiphertext<InCont>)
-where
+pub fn lwe_ciphertext_opposite_assign<Scalar, InCont, const Q: u128>(
+    ct: &mut LweCiphertext<InCont, Q>,
+) where
     Scalar: UnsignedInteger,
     InCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     slice_wrapping_opposite_assign(ct.as_mut());
 }
 
@@ -327,13 +355,17 @@ where
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg * mul_cleartext);
 /// ```
-pub fn lwe_ciphertext_cleartext_mul_assign<Scalar, InCont>(
-    lhs: &mut LweCiphertext<InCont>,
+pub fn lwe_ciphertext_cleartext_mul_assign<Scalar, InCont, const Q: u128>(
+    lhs: &mut LweCiphertext<InCont, Q>,
     rhs: Cleartext<Scalar>,
 ) where
     Scalar: UnsignedInteger,
     InCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     slice_wrapping_scalar_mul_assign(lhs.as_mut(), rhs.0);
 }
 
@@ -393,14 +425,18 @@ pub fn lwe_ciphertext_cleartext_mul_assign<Scalar, InCont>(
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg - msg);
 /// ```
-pub fn lwe_ciphertext_sub_assign<Scalar, LhsCont, RhsCont>(
-    lhs: &mut LweCiphertext<LhsCont>,
-    rhs: &LweCiphertext<RhsCont>,
+pub fn lwe_ciphertext_sub_assign<Scalar, LhsCont, RhsCont, const Q: u128>(
+    lhs: &mut LweCiphertext<LhsCont, Q>,
+    rhs: &LweCiphertext<RhsCont, Q>,
 ) where
     Scalar: UnsignedInteger,
     LhsCont: ContainerMut<Element = Scalar>,
     RhsCont: Container<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     slice_wrapping_sub_assign(lhs.as_mut(), rhs.as_ref());
 }
 
@@ -461,15 +497,19 @@ pub fn lwe_ciphertext_sub_assign<Scalar, LhsCont, RhsCont>(
 /// // Check we recovered the expected result
 /// assert_eq!(cleartext, msg * mul_cleartext);
 /// ```
-pub fn lwe_ciphertext_cleartext_mul<Scalar, InputCont, OutputCont>(
-    output: &mut LweCiphertext<OutputCont>,
-    lhs: &LweCiphertext<InputCont>,
+pub fn lwe_ciphertext_cleartext_mul<Scalar, InputCont, OutputCont, const Q: u128>(
+    output: &mut LweCiphertext<OutputCont, Q>,
+    lhs: &LweCiphertext<InputCont, Q>,
     rhs: Cleartext<Scalar>,
 ) where
     Scalar: UnsignedInteger,
     InputCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     output.as_mut().copy_from_slice(lhs.as_ref());
     lwe_ciphertext_cleartext_mul_assign(output, rhs);
 }

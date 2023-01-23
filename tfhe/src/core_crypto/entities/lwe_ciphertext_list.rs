@@ -7,24 +7,24 @@ use crate::core_crypto::entities::*;
 /// A contiguous list containing
 /// [`LWE ciphertexts`](`crate::core_crypto::entities::LweCiphertext`).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct LweCiphertextList<C: Container> {
+pub struct LweCiphertextList<C: Container, const Q: u128> {
     data: C,
     lwe_size: LweSize,
 }
 
-impl<T, C: Container<Element = T>> AsRef<[T]> for LweCiphertextList<C> {
+impl<T, C: Container<Element = T>, const Q: u128> AsRef<[T]> for LweCiphertextList<C, Q> {
     fn as_ref(&self) -> &[T] {
         self.data.as_ref()
     }
 }
 
-impl<T, C: ContainerMut<Element = T>> AsMut<[T]> for LweCiphertextList<C> {
+impl<T, C: ContainerMut<Element = T>, const Q: u128> AsMut<[T]> for LweCiphertextList<C, Q> {
     fn as_mut(&mut self) -> &mut [T] {
         self.data.as_mut()
     }
 }
 
-impl<Scalar, C: Container<Element = Scalar>> LweCiphertextList<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> LweCiphertextList<C, Q> {
     /// Create an [`LweCiphertextList`] from an existing container.
     ///
     /// # Note
@@ -60,7 +60,7 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertextList<C> {
     /// assert_eq!(lwe_list.lwe_size(), lwe_size);
     /// assert_eq!(lwe_list.lwe_ciphertext_count(), lwe_ciphertext_count);
     /// ```
-    pub fn from_container(container: C, lwe_size: LweSize) -> LweCiphertextList<C> {
+    pub fn from_container(container: C, lwe_size: LweSize) -> LweCiphertextList<C, Q> {
         assert!(
             container.container_len() % lwe_size.0 == 0,
             "The provided container length is not valid. \
@@ -90,7 +90,7 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertextList<C> {
 
     /// Return a view of the [`LweCiphertextList`]. This is useful if an algorithm takes a view by
     /// value.
-    pub fn as_view(&self) -> LweCiphertextListView<'_, Scalar> {
+    pub fn as_view(&self) -> LweCiphertextListView<'_, Scalar, Q> {
         LweCiphertextListView::from_container(self.as_ref(), self.lwe_size)
     }
 
@@ -100,24 +100,33 @@ impl<Scalar, C: Container<Element = Scalar>> LweCiphertextList<C> {
     pub fn into_container(self) -> C {
         self.data
     }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> LweCiphertextList<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> LweCiphertextList<C, Q> {
     /// Mutable variant of [`LweCiphertextList::as_view`].
-    pub fn as_mut_view(&mut self) -> LweCiphertextListMutView<'_, Scalar> {
+    pub fn as_mut_view(&mut self) -> LweCiphertextListMutView<'_, Scalar, Q> {
         let lwe_size = self.lwe_size;
         LweCiphertextListMutView::from_container(self.as_mut(), lwe_size)
     }
 }
 
 /// An [`LweCiphertextList`] owning the memory for its own storage.
-pub type LweCiphertextListOwned<Scalar> = LweCiphertextList<Vec<Scalar>>;
+pub type LweCiphertextListOwned<Scalar, const Q: u128> = LweCiphertextList<Vec<Scalar>, Q>;
 /// An [`LweCiphertextList`] immutably borrowing memory for its own storage.
-pub type LweCiphertextListView<'data, Scalar> = LweCiphertextList<&'data [Scalar]>;
+pub type LweCiphertextListView<'data, Scalar, const Q: u128> =
+    LweCiphertextList<&'data [Scalar], Q>;
 /// An [`LweCiphertextList`] mutably borrowing memory for its own storage.
-pub type LweCiphertextListMutView<'data, Scalar> = LweCiphertextList<&'data mut [Scalar]>;
+pub type LweCiphertextListMutView<'data, Scalar, const Q: u128> =
+    LweCiphertextList<&'data mut [Scalar], Q>;
 
-impl<Scalar: Copy> LweCiphertextListOwned<Scalar> {
+pub type LweCiphertextList32 = LweCiphertextList<Vec<u32>, NATIVE_32_BITS_MODULUS>;
+pub type LweCiphertextList64 = LweCiphertextList<Vec<u64>, NATIVE_64_BITS_MODULUS>;
+
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> LweCiphertextListOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`LweCiphertextList`].
     ///
     /// # Note
@@ -133,7 +142,12 @@ impl<Scalar: Copy> LweCiphertextListOwned<Scalar> {
         fill_with: Scalar,
         lwe_size: LweSize,
         ciphertext_count: LweCiphertextCount,
-    ) -> LweCiphertextListOwned<Scalar> {
+    ) -> LweCiphertextListOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         LweCiphertextListOwned::from_container(
             vec![fill_with; lwe_size.0 * ciphertext_count.0],
             lwe_size,
@@ -145,28 +159,28 @@ impl<Scalar: Copy> LweCiphertextListOwned<Scalar> {
 #[derive(Clone, Copy)]
 pub struct LweCiphertextListCreationMetadata(pub LweSize);
 
-impl<C: Container> CreateFrom<C> for LweCiphertextList<C> {
+impl<C: Container, const Q: u128> CreateFrom<C> for LweCiphertextList<C, Q> {
     type Metadata = LweCiphertextListCreationMetadata;
 
     #[inline]
-    fn create_from(from: C, meta: Self::Metadata) -> LweCiphertextList<C> {
+    fn create_from(from: C, meta: Self::Metadata) -> LweCiphertextList<C, Q> {
         let lwe_size = meta.0;
         LweCiphertextList::from_container(from, lwe_size)
     }
 }
 
-impl<C: Container> ContiguousEntityContainer for LweCiphertextList<C> {
+impl<C: Container, const Q: u128> ContiguousEntityContainer for LweCiphertextList<C, Q> {
     type Element = C::Element;
 
     type EntityViewMetadata = LweCiphertextCreationMetadata;
 
-    type EntityView<'this> = LweCiphertextView<'this, Self::Element>
+    type EntityView<'this> = LweCiphertextView<'this, Self::Element, Q>
     where
         Self: 'this;
 
     type SelfViewMetadata = LweCiphertextListCreationMetadata;
 
-    type SelfView<'this> = LweCiphertextListView<'this, Self::Element>
+    type SelfView<'this> = LweCiphertextListView<'this, Self::Element, Q>
     where
         Self: 'this;
 
@@ -183,12 +197,12 @@ impl<C: Container> ContiguousEntityContainer for LweCiphertextList<C> {
     }
 }
 
-impl<C: ContainerMut> ContiguousEntityContainerMut for LweCiphertextList<C> {
-    type EntityMutView<'this> = LweCiphertextMutView<'this, Self::Element>
+impl<C: ContainerMut, const Q: u128> ContiguousEntityContainerMut for LweCiphertextList<C, Q> {
+    type EntityMutView<'this> = LweCiphertextMutView<'this, Self::Element, Q>
     where
         Self: 'this;
 
-    type SelfMutView<'this> = LweCiphertextListMutView<'this, Self::Element>
+    type SelfMutView<'this> = LweCiphertextListMutView<'this, Self::Element, Q>
     where
         Self: 'this;
 }

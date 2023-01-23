@@ -125,7 +125,7 @@ impl<C: Container> CreateFrom<C> for PlaintextList<C> {
     }
 }
 
-impl<Scalar: Numeric, C: Container<Element = Scalar>> ContiguousEntityContainer
+impl<Scalar: Numeric + std::fmt::Display, C: Container<Element = Scalar>> ContiguousEntityContainer
     for PlaintextList<C>
 {
     type Element = C::Element;
@@ -151,8 +151,8 @@ impl<Scalar: Numeric, C: Container<Element = Scalar>> ContiguousEntityContainer
     fn get_self_view_creation_metadata(&self) -> Self::SelfViewMetadata {}
 }
 
-impl<Scalar: Numeric, C: ContainerMut<Element = Scalar>> ContiguousEntityContainerMut
-    for PlaintextList<C>
+impl<Scalar: Numeric + std::fmt::Display, C: ContainerMut<Element = Scalar>>
+    ContiguousEntityContainerMut for PlaintextList<C>
 {
     type EntityMutView<'this>= PlaintextRefMut<'this, Self::Element>
     where

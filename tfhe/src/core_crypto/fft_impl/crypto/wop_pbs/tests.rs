@@ -74,7 +74,7 @@ pub fn test_extract_bits() {
     let fft = fft.as_view();
 
     let lwe_big_sk = glwe_sk.clone().into_lwe_secret_key();
-    let ksk_lwe_big_to_small = allocate_and_generate_new_lwe_keyswitch_key(
+    let ksk_lwe_big_to_small: LweKeyswitchKey64 = allocate_and_generate_new_lwe_keyswitch_key(
         &lwe_big_sk,
         &lwe_small_sk,
         base_log_ksk,
@@ -252,7 +252,7 @@ fn test_circuit_bootstrapping_binary() {
         let value: u64 = test_tools::random_uint_between(0..2u64);
         // Encryption of an LWE with the value 'message'
         let message = Plaintext((value) << delta_log.0);
-        let mut lwe_in = LweCiphertextOwned::new(0u64, lwe_dimension.to_lwe_size());
+        let mut lwe_in = LweCiphertext64::new(0u64, lwe_dimension.to_lwe_size());
         encrypt_lwe_ciphertext(
             &lwe_sk,
             &mut lwe_in,
@@ -571,7 +571,7 @@ pub fn test_extract_bit_circuit_bootstrapping_vertical_packing() {
         DynStack::new(&mut mem),
     );
 
-    let ksk_lwe_big_to_small = allocate_and_generate_new_lwe_keyswitch_key(
+    let ksk_lwe_big_to_small: LweKeyswitchKey64 = allocate_and_generate_new_lwe_keyswitch_key(
         &lwe_big_sk,
         &lwe_small_sk,
         base_log_ksk,

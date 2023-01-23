@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// A structure containing a public key.
 #[derive(Clone)]
 pub struct PublicKey {
-    pub(crate) lwe_public_key: LwePublicKeyOwned<u32>,
+    pub(crate) lwe_public_key: LwePublicKey32,
     pub(crate) parameters: BooleanParameters,
 }
 

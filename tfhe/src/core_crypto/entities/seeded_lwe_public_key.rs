@@ -25,25 +25,25 @@ use crate::core_crypto::entities::*;
 /// $\vec{s}\in\mathbb{Z}\_q^n$ where $n$ is the LWE dimension of the ciphertexts contained in the
 /// public key.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SeededLwePublicKey<C: Container> {
-    lwe_list: SeededLweCiphertextList<C>,
+pub struct SeededLwePublicKey<C: Container, const Q: u128> {
+    lwe_list: SeededLweCiphertextList<C, Q>,
 }
 
-impl<C: Container> std::ops::Deref for SeededLwePublicKey<C> {
-    type Target = SeededLweCiphertextList<C>;
+impl<C: Container, const Q: u128> std::ops::Deref for SeededLwePublicKey<C, Q> {
+    type Target = SeededLweCiphertextList<C, Q>;
 
-    fn deref(&self) -> &SeededLweCiphertextList<C> {
+    fn deref(&self) -> &SeededLweCiphertextList<C, Q> {
         &self.lwe_list
     }
 }
 
-impl<C: ContainerMut> std::ops::DerefMut for SeededLwePublicKey<C> {
-    fn deref_mut(&mut self) -> &mut SeededLweCiphertextList<C> {
+impl<C: ContainerMut, const Q: u128> std::ops::DerefMut for SeededLwePublicKey<C, Q> {
+    fn deref_mut(&mut self) -> &mut SeededLweCiphertextList<C, Q> {
         &mut self.lwe_list
     }
 }
 
-impl<Scalar, C: Container<Element = Scalar>> SeededLwePublicKey<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> SeededLwePublicKey<C, Q> {
     /// Create an [`SeededLwePublicKey`] from an existing container.
     ///
     /// # Note
@@ -107,7 +107,7 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLwePublicKey<C> {
         container: C,
         lwe_size: LweSize,
         compression_seed: CompressionSeed,
-    ) -> SeededLwePublicKey<C> {
+    ) -> SeededLwePublicKey<C, Q> {
         assert!(
             container.container_len() > 0,
             "Got an empty container to create a SeededLwePublicKey"
@@ -139,13 +139,13 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLwePublicKey<C> {
     /// [`LwePublicKey`].
     ///
     /// See [`SeededLwePublicKey::from_container`] for usage.
-    pub fn decompress_into_lwe_public_key(self) -> LwePublicKeyOwned<Scalar>
+    pub fn decompress_into_lwe_public_key(self) -> LwePublicKeyOwned<Scalar, Q>
     where
         Scalar: UnsignedTorus,
     {
         let mut decompressed_list =
             LwePublicKey::new(Scalar::ZERO, self.lwe_size(), self.zero_encryption_count());
-        decompress_seeded_lwe_public_key::<_, _, _, ActivatedRandomGenerator>(
+        decompress_seeded_lwe_public_key::<_, _, _, ActivatedRandomGenerator, Q>(
             &mut decompressed_list,
             &self,
         );
@@ -154,14 +154,18 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLwePublicKey<C> {
 
     /// Return a view of the [`SeededLwePublicKey`]. This is useful if an algorithm takes a view by
     /// value.
-    pub fn as_view(&self) -> SeededLwePublicKey<&'_ [Scalar]> {
+    pub fn as_view(&self) -> SeededLwePublicKey<&'_ [Scalar], Q> {
         SeededLwePublicKey::from_container(self.as_ref(), self.lwe_size(), self.compression_seed())
+    }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
     }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLwePublicKey<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> SeededLwePublicKey<C, Q> {
     /// Mutable variant of [`SeededLwePublicKey::as_view`].
-    pub fn as_mut_view(&mut self) -> SeededLwePublicKey<&'_ mut [Scalar]> {
+    pub fn as_mut_view(&mut self) -> SeededLwePublicKey<&'_ mut [Scalar], Q> {
         let lwe_size = self.lwe_size();
         let compression_seed = self.compression_seed();
         SeededLwePublicKey::from_container(self.as_mut(), lwe_size, compression_seed)
@@ -169,9 +173,12 @@ impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLwePublicKey<C> {
 }
 
 /// An [`SeededLwePublicKey`] owning the memory for its own storage.
-pub type SeededLwePublicKeyOwned<Scalar> = SeededLwePublicKey<Vec<Scalar>>;
+pub type SeededLwePublicKeyOwned<Scalar, const Q: u128> = SeededLwePublicKey<Vec<Scalar>, Q>;
 
-impl<Scalar: Copy> SeededLwePublicKeyOwned<Scalar> {
+pub type SeededLwePublicKey32 = SeededLwePublicKey<Vec<u32>, NATIVE_32_BITS_MODULUS>;
+pub type SeededLwePublicKey64 = SeededLwePublicKey<Vec<u64>, NATIVE_64_BITS_MODULUS>;
+
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> SeededLwePublicKeyOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`SeededLwePublicKey`].
     ///
     /// # Note
@@ -186,7 +193,12 @@ impl<Scalar: Copy> SeededLwePublicKeyOwned<Scalar> {
         lwe_size: LweSize,
         zero_encryption_count: LwePublicKeyZeroEncryptionCount,
         compression_seed: CompressionSeed,
-    ) -> SeededLwePublicKeyOwned<Scalar> {
+    ) -> SeededLwePublicKeyOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         SeededLwePublicKeyOwned::from_container(
             vec![fill_with; zero_encryption_count.0],
             lwe_size,

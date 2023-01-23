@@ -120,7 +120,7 @@ pub fn main() {
     let plaintext = Plaintext(input_message * delta);
 
     // Allocate a new LweCiphertext and encrypt our plaintext
-    let lwe_ciphertext_in: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+    let lwe_ciphertext_in: LweCiphertext64 = allocate_and_encrypt_new_lwe_ciphertext(
         &small_lwe_sk,
         plaintext,
         lwe_modular_std_dev,

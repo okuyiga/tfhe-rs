@@ -79,7 +79,7 @@ impl Degree {
 /// Internally, it uses a LWE ciphertext.
 #[derive(Clone)]
 pub struct Ciphertext {
-    pub ct: LweCiphertextOwned<u64>,
+    pub ct: LweCiphertext64,
     pub degree: Degree,
     pub message_modulus: MessageModulus,
     pub carry_modulus: CarryModulus,
@@ -133,7 +133,7 @@ impl<'de> Deserialize<'de> for Ciphertext {
 /// Internally, it uses a LWE ciphertext.
 #[derive(Clone)]
 pub struct CompressedCiphertext {
-    pub ct: SeededLweCiphertext<u64>,
+    pub ct: SeededLweCiphertext64,
     pub degree: Degree,
     pub message_modulus: MessageModulus,
     pub carry_modulus: CarryModulus,

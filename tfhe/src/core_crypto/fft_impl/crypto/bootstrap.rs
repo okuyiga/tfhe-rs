@@ -1,6 +1,7 @@
 use super::super::math::fft::{FftView, FourierPolynomialList};
 use super::ggsw::{cmux, *};
 use crate::core_crypto::algorithms::extract_lwe_sample_from_glwe_ciphertext;
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::algorithms::polynomial_algorithms::*;
 use crate::core_crypto::commons::math::torus::UnsignedTorus;
 use crate::core_crypto::commons::numeric::CastInto;
@@ -272,10 +273,10 @@ impl<'a> FourierLweBootstrapKeyView<'a> {
         }
     }
 
-    pub fn bootstrap<Scalar>(
+    pub fn bootstrap<Scalar, const Q: u128>(
         self,
-        lwe_out: &mut [Scalar],
-        lwe_in: &[Scalar],
+        mut lwe_out: LweCiphertextMutView<'_, Scalar, Q>,
+        lwe_in: LweCiphertextView<'_, Scalar, Q>,
         accumulator: GlweCiphertextView<'_, Scalar>,
         fft: FftView<'_>,
         stack: DynStack<'_>,
@@ -283,16 +284,21 @@ impl<'a> FourierLweBootstrapKeyView<'a> {
         // CastInto required for PBS modulus switch which returns a usize
         Scalar: UnsignedTorus + CastInto<usize>,
     {
+        assert!(
+            is_native_modulus::<Scalar, Q>(),
+            "This operation only supports native moduli"
+        );
+
         let (mut local_accumulator_data, stack) =
             stack.collect_aligned(CACHELINE_ALIGN, accumulator.as_ref().iter().copied());
         let mut local_accumulator = GlweCiphertextMutView::from_container(
             &mut *local_accumulator_data,
             accumulator.polynomial_size(),
         );
-        self.blind_rotate_assign(local_accumulator.as_mut_view(), lwe_in, fft, stack);
+        self.blind_rotate_assign(local_accumulator.as_mut_view(), lwe_in.as_ref(), fft, stack);
         extract_lwe_sample_from_glwe_ciphertext(
             &local_accumulator,
-            &mut LweCiphertextMutView::from_container(&mut *lwe_out),
+            &mut lwe_out,
             MonomialDegree(0),
         );
     }

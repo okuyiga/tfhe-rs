@@ -1,14 +1,20 @@
 //! Module with primitives pertaining to [`SeededLweCiphertext`] decompression.
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::commons::math::random::RandomGenerator;
 use crate::core_crypto::commons::traits::*;
 use crate::core_crypto::entities::*;
 
 /// Convenience function to share the core logic of the decompression algorithm for
 /// [`SeededLweCiphertext`] between all functions needing it.
-pub fn decompress_seeded_lwe_ciphertext_with_existing_generator<Scalar, OutputCont, Gen>(
-    output_lwe: &mut LweCiphertext<OutputCont>,
-    input_seeded_lwe: &SeededLweCiphertext<Scalar>,
+pub fn decompress_seeded_lwe_ciphertext_with_existing_generator<
+    Scalar,
+    OutputCont,
+    Gen,
+    const Q: u128,
+>(
+    output_lwe: &mut LweCiphertext<OutputCont, Q>,
+    input_seeded_lwe: &SeededLweCiphertext<Scalar, Q>,
     generator: &mut RandomGenerator<Gen>,
 ) where
     Scalar: UnsignedTorus,
@@ -24,16 +30,20 @@ pub fn decompress_seeded_lwe_ciphertext_with_existing_generator<Scalar, OutputCo
 
 /// Decompress a [`SeededLweCiphertext`], without consuming it, into a standard
 /// [`LweCiphertext`].
-pub fn decompress_seeded_lwe_ciphertext<Scalar, OutputCont, Gen>(
-    output_lwe: &mut LweCiphertext<OutputCont>,
-    input_seeded_lwe: &SeededLweCiphertext<Scalar>,
+pub fn decompress_seeded_lwe_ciphertext<Scalar, OutputCont, Gen, const Q: u128>(
+    output_lwe: &mut LweCiphertext<OutputCont, Q>,
+    input_seeded_lwe: &SeededLweCiphertext<Scalar, Q>,
 ) where
     Scalar: UnsignedTorus,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     let mut generator = RandomGenerator::<Gen>::new(input_seeded_lwe.compression_seed().seed);
-    decompress_seeded_lwe_ciphertext_with_existing_generator::<_, _, Gen>(
+    decompress_seeded_lwe_ciphertext_with_existing_generator::<_, _, Gen, Q>(
         output_lwe,
         input_seeded_lwe,
         &mut generator,

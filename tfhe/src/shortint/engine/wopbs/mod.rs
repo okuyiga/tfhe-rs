@@ -167,10 +167,10 @@ impl ShortintEngine {
     pub(crate) fn extract_bits(
         &mut self,
         delta_log: DeltaLog,
-        lwe_in: &LweCiphertextOwned<u64>,
+        lwe_in: &LweCiphertext64,
         wopbs_key: &WopbsKey,
         extracted_bit_count: ExtractedBitsCount,
-    ) -> EngineResult<LweCiphertextListOwned<u64>> {
+    ) -> EngineResult<LweCiphertextList64> {
         let server_key = &wopbs_key.wopbs_server_key;
 
         let lwe_size = server_key
@@ -215,13 +215,13 @@ impl ShortintEngine {
         Ok(output)
     }
 
-    pub(crate) fn circuit_bootstrap_with_bits(
+    pub(crate) fn circuit_bootstrap_with_bits<const Q: u128>(
         &mut self,
         wopbs_key: &WopbsKey,
-        extracted_bits: &LweCiphertextListView<'_, u64>,
+        extracted_bits: &LweCiphertextListView<'_, u64, Q>,
         lut: &PlaintextListView<'_, u64>,
         count: LweCiphertextCount,
-    ) -> EngineResult<LweCiphertextListOwned<u64>> {
+    ) -> EngineResult<LweCiphertextListOwned<u64, Q>> {
         let sks = &wopbs_key.wopbs_server_key;
         let fourier_bsk = &sks.bootstrapping_key;
 
@@ -486,8 +486,8 @@ impl ShortintEngine {
         &mut self,
         wopbs_key: &WopbsKey,
         vec_lut: Vec<Vec<u64>>,
-        extracted_bits_blocks: Vec<LweCiphertextListOwned<u64>>,
-    ) -> Vec<LweCiphertextOwned<u64>> {
+        extracted_bits_blocks: Vec<LweCiphertextList64>,
+    ) -> Vec<LweCiphertext64> {
         let lwe_size = extracted_bits_blocks[0].lwe_size();
 
         let mut all_datas = vec![];
@@ -498,7 +498,10 @@ impl ShortintEngine {
         }
 
         let flatenned_extracted_bits_view =
-            LweCiphertextListView::from_container(all_datas.as_slice(), lwe_size);
+            LweCiphertextListView::<_, NATIVE_64_BITS_MODULUS>::from_container(
+                all_datas.as_slice(),
+                lwe_size,
+            );
 
         let flattened_lut: Vec<u64> = vec_lut.iter().flatten().copied().collect();
         let plaintext_lut = PlaintextListView::from_container(&flattened_lut);

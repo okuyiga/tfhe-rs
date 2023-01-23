@@ -6,13 +6,13 @@ use crate::core_crypto::entities::*;
 
 /// A [`seeded GLWE ciphertext`](`SeededLweCiphertext`).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SeededLweCiphertext<Scalar> {
+pub struct SeededLweCiphertext<Scalar, const Q: u128> {
     data: Scalar,
     lwe_size: LweSize,
     compression_seed: CompressionSeed,
 }
 
-impl<Scalar> SeededLweCiphertext<Scalar> {
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> SeededLweCiphertext<Scalar, Q> {
     /// Create a [`SeededLweCiphertext`] from a scalar.
     ///
     /// # Note
@@ -66,7 +66,7 @@ impl<Scalar> SeededLweCiphertext<Scalar> {
         scalar: Scalar,
         lwe_size: LweSize,
         compression_seed: CompressionSeed,
-    ) -> SeededLweCiphertext<Scalar> {
+    ) -> SeededLweCiphertext<Scalar, Q> {
         SeededLweCiphertext {
             data: scalar,
             lwe_size,
@@ -91,7 +91,7 @@ impl<Scalar> SeededLweCiphertext<Scalar> {
     /// Return an immutable view to the [`LweBody`] of a [`SeededLweCiphertext`].
     ///
     /// See [`SeededLweCiphertext::from_scalar`] for usage.
-    pub fn get_body(&self) -> LweBody<&Scalar> {
+    pub fn get_body(&self) -> LweBody<&Scalar, Q> {
         LweBody(&self.data)
     }
 
@@ -106,16 +106,20 @@ impl<Scalar> SeededLweCiphertext<Scalar> {
     /// [`LweCiphertext`].
     ///
     /// See [`SeededLweCiphertext::from_scalar`] for usage.
-    pub fn decompress_into_lwe_ciphertext(self) -> LweCiphertextOwned<Scalar>
+    pub fn decompress_into_lwe_ciphertext(self) -> LweCiphertextOwned<Scalar, Q>
     where
         Scalar: UnsignedTorus,
     {
         let mut decompressed_ct = LweCiphertext::new(Scalar::ZERO, self.lwe_size());
-        decompress_seeded_lwe_ciphertext::<_, _, ActivatedRandomGenerator>(
+        decompress_seeded_lwe_ciphertext::<_, _, ActivatedRandomGenerator, Q>(
             &mut decompressed_ct,
             &self,
         );
         decompressed_ct
+    }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
     }
 
     /// Allocate memory and create a new owned [`SeededLweCiphertext`].
@@ -132,16 +136,24 @@ impl<Scalar> SeededLweCiphertext<Scalar> {
         scalar: Scalar,
         lwe_size: LweSize,
         compression_seed: CompressionSeed,
-    ) -> SeededLweCiphertext<Scalar> {
+    ) -> SeededLweCiphertext<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         SeededLweCiphertext::from_scalar(scalar, lwe_size, compression_seed)
     }
 }
 
-impl<Scalar> SeededLweCiphertext<Scalar> {
+impl<Scalar, const Q: u128> SeededLweCiphertext<Scalar, Q> {
     /// Mutable variant of [`SeededLweCiphertext::get_body`].
     ///
     /// See [`SeededLweCiphertext::from_scalar`] for usage.
-    pub fn get_mut_body(&mut self) -> LweBody<&mut Scalar> {
+    pub fn get_mut_body(&mut self) -> LweBody<&mut Scalar, Q> {
         LweBody(&mut self.data)
     }
 }
+
+pub type SeededLweCiphertext32 = SeededLweCiphertext<u32, NATIVE_32_BITS_MODULUS>;
+pub type SeededLweCiphertext64 = SeededLweCiphertext<u64, NATIVE_64_BITS_MODULUS>;

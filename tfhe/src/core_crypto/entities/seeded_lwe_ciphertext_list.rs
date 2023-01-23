@@ -9,25 +9,25 @@ use crate::core_crypto::entities::*;
 /// A seeded list containing
 /// [`LWE ciphertexts`](`crate::core_crypto::entities::LweCiphertext`).
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SeededLweCiphertextList<C: Container> {
+pub struct SeededLweCiphertextList<C: Container, const Q: u128> {
     data: C,
     lwe_size: LweSize,
     compression_seed: CompressionSeed,
 }
 
-impl<T, C: Container<Element = T>> AsRef<[T]> for SeededLweCiphertextList<C> {
+impl<T, C: Container<Element = T>, const Q: u128> AsRef<[T]> for SeededLweCiphertextList<C, Q> {
     fn as_ref(&self) -> &[T] {
         self.data.as_ref()
     }
 }
 
-impl<T, C: ContainerMut<Element = T>> AsMut<[T]> for SeededLweCiphertextList<C> {
+impl<T, C: ContainerMut<Element = T>, const Q: u128> AsMut<[T]> for SeededLweCiphertextList<C, Q> {
     fn as_mut(&mut self) -> &mut [T] {
         self.data.as_mut()
     }
 }
 
-impl<Scalar, C: Container<Element = Scalar>> SeededLweCiphertextList<C> {
+impl<Scalar, C: Container<Element = Scalar>, const Q: u128> SeededLweCiphertextList<C, Q> {
     /// Create an [`SeededLweCiphertextList`] from an existing container.
     ///
     /// # Note
@@ -88,7 +88,7 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweCiphertextList<C> {
         container: C,
         lwe_size: LweSize,
         compression_seed: CompressionSeed,
-    ) -> SeededLweCiphertextList<C> {
+    ) -> SeededLweCiphertextList<C, Q> {
         SeededLweCiphertextList {
             data: container,
             lwe_size,
@@ -128,13 +128,13 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweCiphertextList<C> {
     /// [`LweCiphertextList`].
     ///
     /// See [`SeededLweCiphertextList::from_container`] for usage.
-    pub fn decompress_into_lwe_ciphertext_list(self) -> LweCiphertextListOwned<Scalar>
+    pub fn decompress_into_lwe_ciphertext_list(self) -> LweCiphertextListOwned<Scalar, Q>
     where
         Scalar: UnsignedTorus,
     {
         let mut decompressed_list =
             LweCiphertextList::new(Scalar::ZERO, self.lwe_size(), self.lwe_ciphertext_count());
-        decompress_seeded_lwe_ciphertext_list::<_, _, _, ActivatedRandomGenerator>(
+        decompress_seeded_lwe_ciphertext_list::<_, _, _, ActivatedRandomGenerator, Q>(
             &mut decompressed_list,
             &self,
         );
@@ -143,18 +143,22 @@ impl<Scalar, C: Container<Element = Scalar>> SeededLweCiphertextList<C> {
 
     /// Return a view of the [`SeededLweCiphertextList`]. This is useful if an algorithm takes a
     /// view by value.
-    pub fn as_view(&self) -> SeededLweCiphertextList<&'_ [Scalar]> {
+    pub fn as_view(&self) -> SeededLweCiphertextList<&'_ [Scalar], Q> {
         SeededLweCiphertextList::from_container(
             self.as_ref(),
             self.lwe_size(),
             self.compression_seed(),
         )
     }
+
+    pub const fn modulus(&self) -> u128 {
+        Q
+    }
 }
 
-impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLweCiphertextList<C> {
+impl<Scalar, C: ContainerMut<Element = Scalar>, const Q: u128> SeededLweCiphertextList<C, Q> {
     /// Mutable variant of [`SeededLweCiphertextList::as_view`].
-    pub fn as_mut_view(&mut self) -> SeededLweCiphertextList<&'_ mut [Scalar]> {
+    pub fn as_mut_view(&mut self) -> SeededLweCiphertextList<&'_ mut [Scalar], Q> {
         let lwe_size = self.lwe_size();
         let compression_seed = self.compression_seed();
         SeededLweCiphertextList::from_container(self.as_mut(), lwe_size, compression_seed)
@@ -162,14 +166,16 @@ impl<Scalar, C: ContainerMut<Element = Scalar>> SeededLweCiphertextList<C> {
 }
 
 /// An [`SeededLweCiphertextList`] owning the memory for its own storage.
-pub type SeededLweCiphertextListOwned<Scalar> = SeededLweCiphertextList<Vec<Scalar>>;
+pub type SeededLweCiphertextListOwned<Scalar, const Q: u128> =
+    SeededLweCiphertextList<Vec<Scalar>, Q>;
 /// An [`SeededLweCiphertextList`] immutably borrowing memory for its own storage.
-pub type SeededLweCiphertextListView<'data, Scalar> = SeededLweCiphertextList<&'data [Scalar]>;
+pub type SeededLweCiphertextListView<'data, Scalar, const Q: u128> =
+    SeededLweCiphertextList<&'data [Scalar], Q>;
 /// An [`SeededLweCiphertextList`] mutably borrowing memory for its own storage.
-pub type SeededLweCiphertextListMutView<'data, Scalar> =
-    SeededLweCiphertextList<&'data mut [Scalar]>;
+pub type SeededLweCiphertextListMutView<'data, Scalar, const Q: u128> =
+    SeededLweCiphertextList<&'data mut [Scalar], Q>;
 
-impl<Scalar: Copy> SeededLweCiphertextListOwned<Scalar> {
+impl<Scalar: Numeric + std::fmt::Display, const Q: u128> SeededLweCiphertextListOwned<Scalar, Q> {
     /// Allocate memory and create a new owned [`SeededLweCiphertextList`].
     ///
     /// # Note
@@ -186,7 +192,12 @@ impl<Scalar: Copy> SeededLweCiphertextListOwned<Scalar> {
         lwe_size: LweSize,
         ciphertext_count: LweCiphertextCount,
         compression_seed: CompressionSeed,
-    ) -> SeededLweCiphertextListOwned<Scalar> {
+    ) -> SeededLweCiphertextListOwned<Scalar, Q> {
+        assert!(
+            (Scalar::BITS == 128) || (Q != 0 && Q <= 1 << Scalar::BITS),
+            "Selected modulus {Q}, is invalid either 0 or greater than max value of Scalar {}",
+            Scalar::MAX
+        );
         SeededLweCiphertextListOwned::from_container(
             vec![fill_with; ciphertext_count.0],
             lwe_size,
@@ -200,22 +211,22 @@ impl<Scalar: Copy> SeededLweCiphertextListOwned<Scalar> {
 #[derive(Clone, Copy)]
 pub struct SeededLweCiphertextListCreationMetadata(pub LweSize, pub CompressionSeed);
 
-impl<C: Container> CreateFrom<C> for SeededLweCiphertextList<C> {
+impl<C: Container, const Q: u128> CreateFrom<C> for SeededLweCiphertextList<C, Q> {
     type Metadata = SeededLweCiphertextListCreationMetadata;
 
     #[inline]
-    fn create_from(from: C, meta: Self::Metadata) -> SeededLweCiphertextList<C> {
+    fn create_from(from: C, meta: Self::Metadata) -> SeededLweCiphertextList<C, Q> {
         let SeededLweCiphertextListCreationMetadata(lwe_size, compression_seed) = meta;
         SeededLweCiphertextList::from_container(from, lwe_size, compression_seed)
     }
 }
 
-impl<C: Container> ContiguousEntityContainer for SeededLweCiphertextList<C> {
+impl<C: Container, const Q: u128> ContiguousEntityContainer for SeededLweCiphertextList<C, Q> {
     type Element = C::Element;
 
     type EntityViewMetadata = ();
 
-    type EntityView<'this> = LweBody<&'this Self::Element>
+    type EntityView<'this> = LweBody<&'this Self::Element, Q>
     where
         Self: 'this;
 
@@ -241,8 +252,10 @@ impl<C: Container> ContiguousEntityContainer for SeededLweCiphertextList<C> {
     }
 }
 
-impl<C: ContainerMut> ContiguousEntityContainerMut for SeededLweCiphertextList<C> {
-    type EntityMutView<'this> = LweBody<&'this mut Self::Element>
+impl<C: ContainerMut, const Q: u128> ContiguousEntityContainerMut
+    for SeededLweCiphertextList<C, Q>
+{
+    type EntityMutView<'this> = LweBody<&'this mut Self::Element, Q>
     where
         Self: 'this;
 

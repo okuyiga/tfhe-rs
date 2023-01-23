@@ -1,6 +1,7 @@
 //! Module containing primitives pertaining to the [`LWE programmable
 //! bootstrap`](`LweBootstrapKey#programmable-bootstrapping`).
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::commons::computation_buffers::ComputationBuffers;
 use crate::core_crypto::commons::parameters::*;
 use crate::core_crypto::commons::traits::*;
@@ -17,8 +18,8 @@ use dyn_stack::{DynStack, SizeOverflow, StackReq};
 ///
 /// If you want to manage the computation memory manually you can use
 /// [`blind_rotate_assign_mem_optimized`].
-pub fn blind_rotate_assign<Scalar, InputCont, OutputCont, KeyCont>(
-    input: &LweCiphertext<InputCont>,
+pub fn blind_rotate_assign<Scalar, InputCont, OutputCont, KeyCont, const Q: u128>(
+    input: &LweCiphertext<InputCont, Q>,
     lut: &mut GlweCiphertext<OutputCont>,
     fourier_bsk: &FourierLweBootstrapKey<KeyCont>,
 ) where
@@ -28,6 +29,11 @@ pub fn blind_rotate_assign<Scalar, InputCont, OutputCont, KeyCont>(
     OutputCont: ContainerMut<Element = Scalar>,
     KeyCont: Container<Element = c64>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
+
     let mut buffers = ComputationBuffers::new();
 
     let fft = Fft::new(fourier_bsk.polynomial_size());
@@ -51,8 +57,8 @@ pub fn blind_rotate_assign<Scalar, InputCont, OutputCont, KeyCont>(
 /// Memory optimized version of [`blind_rotate_assign`], the caller must provide
 /// a properly configured [`FftView`] object and a `DynStack` used as a memory buffer having a
 /// capacity at least as large as the result of [`blind_rotate_assign_mem_optimized_requirement`].
-pub fn blind_rotate_assign_mem_optimized<Scalar, InputCont, OutputCont, KeyCont>(
-    input: &LweCiphertext<InputCont>,
+pub fn blind_rotate_assign_mem_optimized<Scalar, InputCont, OutputCont, KeyCont, const Q: u128>(
+    input: &LweCiphertext<InputCont, Q>,
     lut: &mut GlweCiphertext<OutputCont>,
     fourier_bsk: &FourierLweBootstrapKey<KeyCont>,
     fft: FftView<'_>,
@@ -64,6 +70,10 @@ pub fn blind_rotate_assign_mem_optimized<Scalar, InputCont, OutputCont, KeyCont>
     OutputCont: ContainerMut<Element = Scalar>,
     KeyCont: Container<Element = c64>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     fourier_bsk
         .as_view()
         .blind_rotate_assign(lut.as_mut_view(), input.as_ref(), fft, stack);
@@ -173,7 +183,7 @@ pub fn blind_rotate_assign_mem_optimized_requirement<Scalar>(
 /// let plaintext = Plaintext(input_message * delta);
 ///
 /// // Allocate a new LweCiphertext and encrypt our plaintext
-/// let lwe_ciphertext_in: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+/// let lwe_ciphertext_in: LweCiphertext64 = allocate_and_encrypt_new_lwe_ciphertext(
 ///     &small_lwe_sk,
 ///     plaintext,
 ///     lwe_modular_std_dev,
@@ -270,9 +280,16 @@ pub fn blind_rotate_assign_mem_optimized_requirement<Scalar>(
 ///     "Mulitplication via PBS result is correct! Expected 6, got {pbs_multiplication_result}"
 /// );
 /// ```
-pub fn programmable_bootstrap_lwe_ciphertext<Scalar, InputCont, OutputCont, AccCont, KeyCont>(
-    input: &LweCiphertext<InputCont>,
-    output: &mut LweCiphertext<OutputCont>,
+pub fn programmable_bootstrap_lwe_ciphertext<
+    Scalar,
+    InputCont,
+    OutputCont,
+    AccCont,
+    KeyCont,
+    const Q: u128,
+>(
+    input: &LweCiphertext<InputCont, Q>,
+    output: &mut LweCiphertext<OutputCont, Q>,
     accumulator: &GlweCiphertext<AccCont>,
     fourier_bsk: &FourierLweBootstrapKey<KeyCont>,
 ) where
@@ -320,9 +337,10 @@ pub fn programmable_bootstrap_lwe_ciphertext_mem_optimized<
     OutputCont,
     AccCont,
     KeyCont,
+    const Q: u128,
 >(
-    input: &LweCiphertext<InputCont>,
-    output: &mut LweCiphertext<OutputCont>,
+    input: &LweCiphertext<InputCont, Q>,
+    output: &mut LweCiphertext<OutputCont, Q>,
     accumulator: &GlweCiphertext<AccCont>,
     fourier_bsk: &FourierLweBootstrapKey<KeyCont>,
     fft: FftView<'_>,
@@ -336,8 +354,8 @@ pub fn programmable_bootstrap_lwe_ciphertext_mem_optimized<
     KeyCont: Container<Element = c64>,
 {
     fourier_bsk.as_view().bootstrap(
-        output.as_mut(),
-        input.as_ref(),
+        output.as_mut_view(),
+        input.as_view(),
         accumulator.as_view(),
         fft,
         stack,

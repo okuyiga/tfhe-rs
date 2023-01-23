@@ -14,13 +14,13 @@ use crate::core_crypto::entities::*;
 /// [`LWE secret key`](`LweSecretKey`).
 ///
 /// Consider using [`par_generate_lwe_public_key`] for better key generation times.
-pub fn generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen>(
+pub fn generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
-    output: &mut LwePublicKey<OutputKeyCont>,
+    output: &mut LwePublicKey<OutputKeyCont, Q>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
@@ -46,14 +46,14 @@ pub fn generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen>(
 /// Consider using [`par_allocate_and_generate_new_lwe_public_key`] for better key generation times.
 ///
 /// See [`encrypt_lwe_ciphertext_with_public_key`] for usage.
-pub fn allocate_and_generate_new_lwe_public_key<Scalar, InputKeyCont, Gen>(
+pub fn allocate_and_generate_new_lwe_public_key<Scalar, InputKeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
     zero_encryption_count: LwePublicKeyZeroEncryptionCount,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
-) -> LwePublicKeyOwned<Scalar>
+) -> LwePublicKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
@@ -70,13 +70,13 @@ where
 
 /// Parallel variant of [`generate_lwe_public_key`], it is recommended to use this function for
 /// better key generation times as LWE public keys can be quite large.
-pub fn par_generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen>(
+pub fn par_generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
-    output: &mut LwePublicKey<OutputKeyCont>,
+    output: &mut LwePublicKey<OutputKeyCont, Q>,
     noise_parameters: impl DispersionParameter + Sync,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar> + Sync,
     OutputKeyCont: ContainerMut<Element = Scalar>,
     Gen: ParallelByteRandomGenerator,
@@ -98,14 +98,14 @@ pub fn par_generate_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Gen>(
 
 /// Parallel variant of [`allocate_and_generate_new_lwe_public_key`], it is recommended to use this
 /// function for better key generation times as LWE public keys can be quite large.
-pub fn par_allocate_and_generate_new_lwe_public_key<Scalar, InputKeyCont, Gen>(
+pub fn par_allocate_and_generate_new_lwe_public_key<Scalar, InputKeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
     zero_encryption_count: LwePublicKeyZeroEncryptionCount,
     noise_parameters: impl DispersionParameter + Sync,
     generator: &mut EncryptionRandomGenerator<Gen>,
-) -> LwePublicKeyOwned<Scalar>
+) -> LwePublicKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar> + Sync,
     Gen: ParallelByteRandomGenerator,
 {
@@ -123,13 +123,19 @@ where
 /// Fill a [`seeded LWE public key`](`SeededLwePublicKey`) with an actual public key.
 ///
 /// Consider using [`par_generate_seeded_lwe_public_key`] for better key generation times.
-pub fn generate_seeded_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, NoiseSeeder>(
+pub fn generate_seeded_lwe_public_key<
+    Scalar,
+    InputKeyCont,
+    OutputKeyCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
-    output: &mut SeededLwePublicKey<OutputKeyCont>,
+    output: &mut SeededLwePublicKey<OutputKeyCont, Q>,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     OutputKeyCont: ContainerMut<Element = Scalar>,
     // Maybe Sized allows to pass Box<dyn Seeder>.
@@ -163,14 +169,19 @@ pub fn generate_seeded_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, Noise
 /// generation times.
 ///
 /// See [`encrypt_lwe_ciphertext_with_seeded_public_key`] for usage.
-pub fn allocate_and_generate_new_seeded_lwe_public_key<Scalar, InputKeyCont, NoiseSeeder>(
+pub fn allocate_and_generate_new_seeded_lwe_public_key<
+    Scalar,
+    InputKeyCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
     zero_encryption_count: LwePublicKeyZeroEncryptionCount,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
-) -> SeededLwePublicKeyOwned<Scalar>
+) -> SeededLwePublicKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar>,
     // Maybe Sized allows to pass Box<dyn Seeder>.
     NoiseSeeder: Seeder + ?Sized,
@@ -191,13 +202,19 @@ where
 
 /// Parallel variant of [`par_generate_seeded_lwe_public_key`], it is recommended to use this
 /// function for better key generation times as LWE public keys can be quite large.
-pub fn par_generate_seeded_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, NoiseSeeder>(
+pub fn par_generate_seeded_lwe_public_key<
+    Scalar,
+    InputKeyCont,
+    OutputKeyCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
-    output: &mut SeededLwePublicKey<OutputKeyCont>,
+    output: &mut SeededLwePublicKey<OutputKeyCont, Q>,
     noise_parameters: impl DispersionParameter + Sync,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar> + Sync,
     OutputKeyCont: ContainerMut<Element = Scalar> + Sync,
     // Maybe Sized allows to pass Box<dyn Seeder>.
@@ -226,14 +243,19 @@ pub fn par_generate_seeded_lwe_public_key<Scalar, InputKeyCont, OutputKeyCont, N
 
 /// Parallel variant of [`allocate_and_generate_new_seeded_lwe_public_key`], it is recommended to
 /// use this function for better key generation times as LWE public keys can be quite large.
-pub fn par_allocate_and_generate_new_seeded_lwe_public_key<Scalar, InputKeyCont, NoiseSeeder>(
+pub fn par_allocate_and_generate_new_seeded_lwe_public_key<
+    Scalar,
+    InputKeyCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<InputKeyCont>,
     zero_encryption_count: LwePublicKeyZeroEncryptionCount,
     noise_parameters: impl DispersionParameter + Sync,
     noise_seeder: &mut NoiseSeeder,
-) -> SeededLwePublicKeyOwned<Scalar>
+) -> SeededLwePublicKeyOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     InputKeyCont: Container<Element = Scalar> + Sync,
     // Maybe Sized allows to pass Box<dyn Seeder>.
     NoiseSeeder: Seeder + ?Sized,

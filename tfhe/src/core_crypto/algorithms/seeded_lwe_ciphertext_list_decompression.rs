@@ -1,5 +1,6 @@
 //! Module with primitives pertaining to [`SeededLweCiphertextList`] decompression.
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::commons::math::random::RandomGenerator;
 use crate::core_crypto::commons::traits::*;
 use crate::core_crypto::entities::*;
@@ -11,9 +12,10 @@ pub fn decompress_seeded_lwe_ciphertext_list_with_existing_generator<
     InputCont,
     OutputCont,
     Gen,
+    const Q: u128,
 >(
-    output_list: &mut LweCiphertextList<OutputCont>,
-    input_seeded_list: &SeededLweCiphertextList<InputCont>,
+    output_list: &mut LweCiphertextList<OutputCont, Q>,
+    input_seeded_list: &SeededLweCiphertextList<InputCont, Q>,
     generator: &mut RandomGenerator<Gen>,
 ) where
     Scalar: UnsignedTorus,
@@ -32,17 +34,21 @@ pub fn decompress_seeded_lwe_ciphertext_list_with_existing_generator<
 
 /// Decompress a [`SeededLweCiphertextList`], without consuming it, into a standard
 /// [`LweCiphertextList`].
-pub fn decompress_seeded_lwe_ciphertext_list<Scalar, InputCont, OutputCont, Gen>(
-    output_list: &mut LweCiphertextList<OutputCont>,
-    input_seeded_list: &SeededLweCiphertextList<InputCont>,
+pub fn decompress_seeded_lwe_ciphertext_list<Scalar, InputCont, OutputCont, Gen, const Q: u128>(
+    output_list: &mut LweCiphertextList<OutputCont, Q>,
+    input_seeded_list: &SeededLweCiphertextList<InputCont, Q>,
 ) where
     Scalar: UnsignedTorus,
     InputCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     let mut generator = RandomGenerator::<Gen>::new(input_seeded_list.compression_seed().seed);
-    decompress_seeded_lwe_ciphertext_list_with_existing_generator::<_, _, _, Gen>(
+    decompress_seeded_lwe_ciphertext_list_with_existing_generator::<_, _, _, Gen, Q>(
         output_list,
         input_seeded_list,
         &mut generator,

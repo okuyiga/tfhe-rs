@@ -1,6 +1,7 @@
 //! Module containing primitives pertaining to [`LWE ciphertext
 //! keyswitch`](`LweKeyswitchKey#lwe-keyswitch`).
 
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::algorithms::slice_algorithms::*;
 use crate::core_crypto::commons::math::decomposition::SignedDecomposer;
 use crate::core_crypto::commons::numeric::UnsignedInteger;
@@ -83,16 +84,20 @@ use crate::core_crypto::entities::*;
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn keyswitch_lwe_ciphertext<Scalar, KSKCont, InputCont, OutputCont>(
-    lwe_keyswitch_key: &LweKeyswitchKey<KSKCont>,
-    input_lwe_ciphertext: &LweCiphertext<InputCont>,
-    output_lwe_ciphertext: &mut LweCiphertext<OutputCont>,
+pub fn keyswitch_lwe_ciphertext<Scalar, KSKCont, InputCont, OutputCont, const Q: u128>(
+    lwe_keyswitch_key: &LweKeyswitchKey<KSKCont, Q>,
+    input_lwe_ciphertext: &LweCiphertext<InputCont, Q>,
+    output_lwe_ciphertext: &mut LweCiphertext<OutputCont, Q>,
 ) where
     Scalar: UnsignedInteger,
     KSKCont: Container<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     assert!(
         lwe_keyswitch_key.input_key_lwe_dimension()
             == input_lwe_ciphertext.lwe_size().to_lwe_dimension(),

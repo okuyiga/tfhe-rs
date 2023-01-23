@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// It is used to evaluate a Boolean circuits homomorphically.
 #[derive(Clone, Debug)]
 pub enum Ciphertext {
-    Encrypted(LweCiphertextOwned<u32>),
+    Encrypted(LweCiphertext32),
     Trivial(bool),
 }
 
@@ -59,7 +59,7 @@ impl<'de> Deserialize<'de> for Ciphertext {
 /// It has to be decompressed before evaluating a Boolean circuit.
 #[derive(Clone, Debug)]
 pub struct CompressedCiphertext {
-    pub(crate) ciphertext: SeededLweCiphertext<u32>,
+    pub(crate) ciphertext: SeededLweCiphertext32,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -13,31 +13,63 @@ use rayon::prelude::*;
 
 /// Convenience function to share the core logic of the LWE encryption between all functions needing
 /// it.
-pub fn fill_lwe_mask_and_body_for_encryption<Scalar, KeyCont, OutputCont, Gen>(
+pub fn fill_lwe_mask_and_body_for_encryption<Scalar, KeyCont, OutputCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output_mask: &mut LweMask<OutputCont>,
-    output_body: LweBody<&mut Scalar>,
+    output_mask: &mut LweMask<OutputCont, Q>,
+    output_body: LweBody<&mut Scalar, Q>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
+    // First fill the output mask and output body with values of the output Scalar type
     generator.fill_slice_with_random_mask(output_mask.as_mut());
 
     // generate an error from the normal distribution described by std_dev
     *output_body.0 = generator.random_noise(noise_parameters);
 
-    // compute the multisum between the secret key and the mask
-    *output_body.0 = (*output_body.0).wrapping_add(slice_wrapping_dot_product(
-        output_mask.as_ref(),
-        lwe_secret_key.as_ref(),
-    ));
+    // If the modulus is the native one then we just apply wrapping computation and enjoy the perf
+    // gain
+    if is_native_modulus::<Scalar, Q>() {
+        // compute the multisum between the secret key and the mask
+        *output_body.0 = (*output_body.0).wrapping_add(slice_wrapping_dot_product(
+            output_mask.as_ref(),
+            lwe_secret_key.as_ref(),
+        ));
 
-    *output_body.0 = (*output_body.0).wrapping_add(encoded.0);
+        *output_body.0 = (*output_body.0).wrapping_add(encoded.0);
+    } else {
+        // If the modulus is not the native one, then as a fallback we use a bigger data type to
+        // compute without overflows and apply the modulus later
+        let mut ct_128 = LweCiphertext128::new(0u128, lwe_secret_key.lwe_dimension().to_lwe_size());
+        let mut key_128 = LweSecretKey::new_empty_key(0u128, lwe_secret_key.lwe_dimension());
+
+        copy_from_convert(&mut key_128, &lwe_secret_key);
+
+        let (mut tmp_mask, tmp_body) = ct_128.get_mut_mask_and_body();
+
+        copy_from_convert(&mut tmp_mask, &output_mask);
+
+        *tmp_body.0 = (*output_body.0).cast_into();
+
+        let tmp_encoded: Plaintext<u128> = Plaintext(encoded.0.cast_into());
+
+        // compute the multisum between the secret key and the mask
+        *tmp_body.0 = (*tmp_body.0).wrapping_add(slice_wrapping_dot_product(
+            tmp_mask.as_ref(),
+            key_128.as_ref(),
+        ));
+
+        *tmp_body.0 = (*tmp_body.0).wrapping_add(tmp_encoded.0);
+
+        copy_from_u128_mod_convert::<_, _, _, Q>(output_mask, &tmp_mask);
+
+        *output_body.0 = tmp_body.0.wrapping_rem_euclid(Q).cast_into();
+    }
 }
 
 /// Encrypt an input plaintext in an output [`LWE ciphertext`](`LweCiphertext`).
@@ -97,14 +129,14 @@ pub fn fill_lwe_mask_and_body_for_encryption<Scalar, KeyCont, OutputCont, Gen>(
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn encrypt_lwe_ciphertext<Scalar, KeyCont, OutputCont, Gen>(
+pub fn encrypt_lwe_ciphertext<Scalar, KeyCont, OutputCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut LweCiphertext<OutputCont>,
+    output: &mut LweCiphertext<OutputCont, Q>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
@@ -183,14 +215,14 @@ pub fn encrypt_lwe_ciphertext<Scalar, KeyCont, OutputCont, Gen>(
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn allocate_and_encrypt_new_lwe_ciphertext<Scalar, KeyCont, Gen>(
+pub fn allocate_and_encrypt_new_lwe_ciphertext<Scalar, KeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
-) -> LweCiphertextOwned<Scalar>
+) -> LweCiphertextOwned<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
@@ -259,13 +291,17 @@ where
 /// // Again the trivial encryption encrypts _nothing_
 /// assert_eq!(decrypted_plaintext.0, *lwe.get_body().0);
 /// ```
-pub fn trivially_encrypt_lwe_ciphertext<Scalar, OutputCont>(
-    output: &mut LweCiphertext<OutputCont>,
+pub fn trivially_encrypt_lwe_ciphertext<Scalar, OutputCont, const Q: u128>(
+    output: &mut LweCiphertext<OutputCont, Q>,
     encoded: Plaintext<Scalar>,
 ) where
     Scalar: UnsignedTorus,
     OutputCont: ContainerMut<Element = Scalar>,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     output
         .get_mut_mask()
         .as_mut()
@@ -326,13 +362,17 @@ pub fn trivially_encrypt_lwe_ciphertext<Scalar, OutputCont>(
 /// // Again the trivial encryption encrypts _nothing_
 /// assert_eq!(decrypted_plaintext.0, *lwe.get_body().0);
 /// ```
-pub fn allocate_and_trivially_encrypt_new_lwe_ciphertext<Scalar>(
+pub fn allocate_and_trivially_encrypt_new_lwe_ciphertext<Scalar, const Q: u128>(
     lwe_size: LweSize,
     encoded: Plaintext<Scalar>,
-) -> LweCiphertextOwned<Scalar>
+) -> LweCiphertextOwned<Scalar, Q>
 where
     Scalar: UnsignedTorus,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     let mut new_ct = LweCiphertextOwned::new(Scalar::ZERO, lwe_size);
 
     *new_ct.get_mut_body().0 = encoded.0;
@@ -348,12 +388,12 @@ where
 ///
 /// See the [`LWE ciphertext formal definition`](`LweCiphertext#lwe-decryption`) for the definition
 /// of the encryption algorithm.
-pub fn decrypt_lwe_ciphertext<Scalar, KeyCont, InputCont>(
+pub fn decrypt_lwe_ciphertext<Scalar, KeyCont, InputCont, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    lwe_ciphertext: &LweCiphertext<InputCont>,
+    lwe_ciphertext: &LweCiphertext<InputCont, Q>,
 ) -> Plaintext<Scalar>
 where
-    Scalar: UnsignedInteger,
+    Scalar: UnsignedInteger + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
 {
@@ -365,12 +405,34 @@ where
         lwe_secret_key.lwe_dimension()
     );
 
-    let (mask, body) = lwe_ciphertext.get_mask_and_body();
+    if is_native_modulus::<Scalar, Q>() {
+        let (mask, body) = lwe_ciphertext.get_mask_and_body();
 
-    Plaintext(body.0.wrapping_sub(slice_wrapping_dot_product(
-        mask.as_ref(),
-        lwe_secret_key.as_ref(),
-    )))
+        Plaintext(body.0.wrapping_sub(slice_wrapping_dot_product(
+            mask.as_ref(),
+            lwe_secret_key.as_ref(),
+        )))
+    } else {
+        let mut ct_128 = LweCiphertext128::new(0u128, lwe_ciphertext.lwe_size());
+        let mut key_128 = LweSecretKey::new_empty_key(0u128, lwe_secret_key.lwe_dimension());
+
+        copy_from_convert(&mut key_128, &lwe_secret_key);
+
+        copy_from_convert(&mut ct_128, &lwe_ciphertext);
+
+        let (tmp_mask, tmp_body) = ct_128.get_mask_and_body();
+
+        let decrypted: Scalar = tmp_body
+            .0
+            .wrapping_sub(slice_wrapping_dot_product(
+                tmp_mask.as_ref(),
+                key_128.as_ref(),
+            ))
+            .wrapping_rem_euclid(Q)
+            .cast_into();
+
+        Plaintext(decrypted)
+    }
 }
 
 /// Encrypt an input plaintext list in an output [`LWE ciphertext list`](`LweCiphertextList`).
@@ -441,14 +503,14 @@ where
 /// // Check we recovered the original message for each plaintext we encrypted
 /// cleartext_list.iter().for_each(|&elt| assert_eq!(elt, msg));
 /// ```
-pub fn encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, Gen>(
+pub fn encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut LweCiphertextList<OutputCont>,
+    output: &mut LweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
@@ -545,14 +607,14 @@ pub fn encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, Gen>(
 /// // Check we recovered the original message for each plaintext we encrypted
 /// cleartext_list.iter().for_each(|&elt| assert_eq!(elt, msg));
 /// ```
-pub fn par_encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, Gen>(
+pub fn par_encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut LweCiphertextList<OutputCont>,
+    output: &mut LweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter + Sync,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar> + Sync,
     OutputCont: ContainerMut<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
@@ -591,12 +653,12 @@ pub fn par_encrypt_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, G
 ///
 /// See this [`formal definition`](`decrypt_lwe_ciphertext#formal-definition`) for the definition
 /// of the LWE decryption algorithm.
-pub fn decrypt_lwe_ciphertext_list<Scalar, KeyCont, InputCont, OutputCont>(
+pub fn decrypt_lwe_ciphertext_list<Scalar, KeyCont, InputCont, OutputCont, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    input_lwe_ciphertext_list: &LweCiphertextList<InputCont>,
+    input_lwe_ciphertext_list: &LweCiphertextList<InputCont, Q>,
     output_plaintext_list: &mut PlaintextList<OutputCont>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
@@ -681,17 +743,21 @@ pub fn decrypt_lwe_ciphertext_list<Scalar, KeyCont, InputCont, OutputCont>(
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn encrypt_lwe_ciphertext_with_public_key<Scalar, KeyCont, OutputCont, Gen>(
-    lwe_public_key: &LwePublicKey<KeyCont>,
-    output: &mut LweCiphertext<OutputCont>,
+pub fn encrypt_lwe_ciphertext_with_public_key<Scalar, KeyCont, OutputCont, Gen, const Q: u128>(
+    lwe_public_key: &LwePublicKey<KeyCont, Q>,
+    output: &mut LweCiphertext<OutputCont, Q>,
     encoded: Plaintext<Scalar>,
     generator: &mut SecretRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
+    assert!(
+        is_native_modulus::<Scalar, Q>(),
+        "This operation only supports native moduli"
+    );
     assert!(
         output.lwe_size().to_lwe_dimension() == lwe_public_key.lwe_size().to_lwe_dimension(),
         "Mismatch between LweDimension of output cipertext and input public key. \
@@ -782,13 +848,19 @@ pub fn encrypt_lwe_ciphertext_with_public_key<Scalar, KeyCont, OutputCont, Gen>(
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn encrypt_lwe_ciphertext_with_seeded_public_key<Scalar, KeyCont, OutputCont, Gen>(
-    lwe_public_key: &SeededLwePublicKey<KeyCont>,
-    output: &mut LweCiphertext<OutputCont>,
+pub fn encrypt_lwe_ciphertext_with_seeded_public_key<
+    Scalar,
+    KeyCont,
+    OutputCont,
+    Gen,
+    const Q: u128,
+>(
+    lwe_public_key: &SeededLwePublicKey<KeyCont, Q>,
+    output: &mut LweCiphertext<OutputCont, Q>,
     encoded: Plaintext<Scalar>,
     generator: &mut SecretRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     Gen: ByteRandomGenerator,
@@ -836,14 +908,15 @@ pub fn encrypt_seeded_lwe_ciphertext_list_with_existing_generator<
     OutputCont,
     InputCont,
     Gen,
+    const Q: u128,
 >(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertextList<OutputCont>,
+    output: &mut SeededLweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
@@ -955,14 +1028,21 @@ pub fn encrypt_seeded_lwe_ciphertext_list_with_existing_generator<
 /// // Check we recovered the original message for each plaintext we encrypted
 /// cleartext_list.iter().for_each(|&elt| assert_eq!(elt, msg));
 /// ```
-pub fn encrypt_seeded_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, NoiseSeeder>(
+pub fn encrypt_seeded_lwe_ciphertext_list<
+    Scalar,
+    KeyCont,
+    OutputCont,
+    InputCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertextList<OutputCont>,
+    output: &mut SeededLweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     OutputCont: ContainerMut<Element = Scalar>,
     InputCont: Container<Element = Scalar>,
@@ -991,14 +1071,15 @@ pub fn par_encrypt_seeded_lwe_ciphertext_list_with_existing_generator<
     OutputCont,
     InputCont,
     Gen,
+    const Q: u128,
 >(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertextList<OutputCont>,
+    output: &mut SeededLweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter + Sync,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar> + Sync,
     OutputCont: ContainerMut<Element = Scalar> + Sync,
     InputCont: Container<Element = Scalar>,
@@ -1111,14 +1192,21 @@ pub fn par_encrypt_seeded_lwe_ciphertext_list_with_existing_generator<
 /// // Check we recovered the original message for each plaintext we encrypted
 /// cleartext_list.iter().for_each(|&elt| assert_eq!(elt, msg));
 /// ```
-pub fn par_encrypt_seeded_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, InputCont, NoiseSeeder>(
+pub fn par_encrypt_seeded_lwe_ciphertext_list<
+    Scalar,
+    KeyCont,
+    OutputCont,
+    InputCont,
+    NoiseSeeder,
+    const Q: u128,
+>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertextList<OutputCont>,
+    output: &mut SeededLweCiphertextList<OutputCont, Q>,
     encoded: &PlaintextList<InputCont>,
     noise_parameters: impl DispersionParameter + Sync,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus + Sync + Send,
+    Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar> + Sync,
     OutputCont: ContainerMut<Element = Scalar> + Sync,
     InputCont: Container<Element = Scalar>,
@@ -1141,14 +1229,14 @@ pub fn par_encrypt_seeded_lwe_ciphertext_list<Scalar, KeyCont, OutputCont, Input
 
 /// Convenience function to share the core logic of the seeded LWE encryption between all functions
 /// needing it.
-pub fn encrypt_seeded_lwe_ciphertext_with_existing_generator<Scalar, KeyCont, Gen>(
+pub fn encrypt_seeded_lwe_ciphertext_with_existing_generator<Scalar, KeyCont, Gen, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertext<Scalar>,
+    output: &mut SeededLweCiphertext<Scalar, Q>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     generator: &mut EncryptionRandomGenerator<Gen>,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     Gen: ByteRandomGenerator,
 {
@@ -1221,14 +1309,14 @@ pub fn encrypt_seeded_lwe_ciphertext_with_existing_generator<Scalar, KeyCont, Ge
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn encrypt_seeded_lwe_ciphertext<Scalar, KeyCont, NoiseSeeder>(
+pub fn encrypt_seeded_lwe_ciphertext<Scalar, KeyCont, NoiseSeeder, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
-    output: &mut SeededLweCiphertext<Scalar>,
+    output: &mut SeededLweCiphertext<Scalar, Q>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
 ) where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     // Maybe Sized allows to pass Box<dyn Seeder>.
     NoiseSeeder: Seeder + ?Sized,
@@ -1302,14 +1390,14 @@ pub fn encrypt_seeded_lwe_ciphertext<Scalar, KeyCont, NoiseSeeder>(
 /// // Check we recovered the original message
 /// assert_eq!(cleartext, msg);
 /// ```
-pub fn allocate_and_encrypt_new_seeded_lwe_ciphertext<Scalar, KeyCont, NoiseSeeder>(
+pub fn allocate_and_encrypt_new_seeded_lwe_ciphertext<Scalar, KeyCont, NoiseSeeder, const Q: u128>(
     lwe_secret_key: &LweSecretKey<KeyCont>,
     encoded: Plaintext<Scalar>,
     noise_parameters: impl DispersionParameter,
     noise_seeder: &mut NoiseSeeder,
-) -> SeededLweCiphertext<Scalar>
+) -> SeededLweCiphertext<Scalar, Q>
 where
-    Scalar: UnsignedTorus,
+    Scalar: UnsignedTorus + CastFrom<u128> + CastInto<u128>,
     KeyCont: Container<Element = Scalar>,
     // Maybe Sized allows to pass Box<dyn Seeder>.
     NoiseSeeder: Seeder + ?Sized,
@@ -1341,7 +1429,8 @@ mod test {
     use crate::core_crypto::prelude::*;
 
     fn test_parallel_and_seeded_lwe_list_encryption_equivalence<
-        Scalar: UnsignedTorus + Sync + Send,
+        Scalar: UnsignedTorus + Sync + Send + CastFrom<u128> + CastInto<u128>,
+        const Q: u128,
     >() {
         // DISCLAIMER: these toy example parameters are not guaranteed to be secure or yield correct
         // computations
@@ -1372,7 +1461,7 @@ mod test {
             let plaintext_list =
                 PlaintextList::new(encoded_msg, PlaintextCount(lwe_ciphertext_count.0));
             // Create a new LweCiphertextList
-            let mut par_lwe_list = LweCiphertextList::new(
+            let mut par_lwe_list = LweCiphertextList::<_, Q>::new(
                 Scalar::ZERO,
                 lwe_dimension.to_lwe_size(),
                 lwe_ciphertext_count,
@@ -1462,11 +1551,86 @@ mod test {
 
     #[test]
     fn test_parallel_and_seeded_lwe_list_encryption_equivalence_u32() {
-        test_parallel_and_seeded_lwe_list_encryption_equivalence::<u32>();
+        test_parallel_and_seeded_lwe_list_encryption_equivalence::<u32, NATIVE_32_BITS_MODULUS>();
     }
 
     #[test]
     fn test_parallel_and_seeded_lwe_list_encryption_equivalence_u64() {
-        test_parallel_and_seeded_lwe_list_encryption_equivalence::<u64>();
+        test_parallel_and_seeded_lwe_list_encryption_equivalence::<u64, NATIVE_64_BITS_MODULUS>();
+    }
+
+    #[test]
+    fn encrypt_decrypt_non_native_mod() {
+        const MY_MOD: u128 = 1 << 63;
+
+        let lwe_dimension = LweDimension(742);
+        let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
+
+        // Create the PRNG
+        let mut seeder = new_seeder();
+        let seeder = seeder.as_mut();
+
+        let mut secret_generator =
+            SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
+        let mut encryption_generator =
+            EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+
+        const NB_TESTS: usize = 10;
+        const MSG_MAX: u64 = 16;
+        const DELTA: u64 = (MY_MOD / MSG_MAX as u128) as u64;
+
+        for val in 0..MSG_MAX {
+            for _ in 0..NB_TESTS {
+                let lwe_sk = allocate_and_generate_new_binary_lwe_secret_key(
+                    lwe_dimension,
+                    &mut secret_generator,
+                );
+
+                let mut ct = LweCiphertext::<_, MY_MOD>::new(0, lwe_dimension.to_lwe_size());
+
+                let msg = val;
+
+                let plaintext = Plaintext(msg * DELTA);
+
+                encrypt_lwe_ciphertext(
+                    &lwe_sk,
+                    &mut ct,
+                    plaintext,
+                    lwe_modular_std_dev,
+                    &mut encryption_generator,
+                );
+
+                assert!(ct.as_ref().iter().all(|&x| (x as u128) < MY_MOD));
+
+                let ct_clone = ct.clone();
+
+                lwe_ciphertext_add_assign(&mut ct, &ct_clone);
+
+                fn round_decode<Scalar: UnsignedInteger>(
+                    decrypted: Scalar,
+                    delta: Scalar,
+                ) -> Scalar {
+                    //The bit before the message
+                    let rounding_bit = delta >> 1;
+
+                    //compute the rounding bit
+                    let rounding = (decrypted & rounding_bit) << 1;
+
+                    (decrypted.wrapping_add(rounding)) / delta
+                }
+
+                let decrypted = decrypt_lwe_ciphertext(&lwe_sk, &ct_clone);
+
+                let decoded = round_decode(decrypted.0, DELTA) % MSG_MAX;
+
+                assert_eq!(msg, decoded);
+
+                let decrypted_double = decrypt_lwe_ciphertext(&lwe_sk, &ct);
+
+                let decoded_double = round_decode(decrypted_double.0, DELTA) % MSG_MAX;
+
+                assert_eq!((msg + msg) % MSG_MAX, decoded_double);
+            }
+        }
     }
 }

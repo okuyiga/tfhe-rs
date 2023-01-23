@@ -118,7 +118,7 @@ impl BooleanEngine {
         );
 
         #[cfg(not(feature = "__wasm_api"))]
-        let lwe_public_key: LwePublicKeyOwned<u32> = par_allocate_and_generate_new_lwe_public_key(
+        let lwe_public_key: LwePublicKey32 = par_allocate_and_generate_new_lwe_public_key(
             &client_key.lwe_secret_key,
             zero_encryption_count,
             client_key.parameters.lwe_modular_std_dev,
@@ -126,7 +126,7 @@ impl BooleanEngine {
         );
 
         #[cfg(feature = "__wasm_api")]
-        let lwe_public_key: LwePublicKeyOwned<u32> = allocate_and_generate_new_lwe_public_key(
+        let lwe_public_key: LwePublicKey32 = allocate_and_generate_new_lwe_public_key(
             &client_key.lwe_secret_key,
             zero_encryption_count,
             client_key.parameters.lwe_modular_std_dev,
@@ -276,7 +276,7 @@ impl BooleanEngine {
         &mut self,
         ct: &Ciphertext,
         server_key: &ServerKey,
-    ) -> LweCiphertextOwned<u32> {
+    ) -> LweCiphertext32 {
         match ct {
             Ciphertext::Encrypted(ct_ct) => ct_ct.clone(),
             Ciphertext::Trivial(message) => {

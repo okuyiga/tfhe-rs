@@ -30,7 +30,7 @@ thread_local! {
 /// Stores buffers associated to a ServerKey
 pub struct Buffers {
     pub(crate) accumulator: GlweCiphertextOwned<u64>,
-    pub(crate) buffer_lwe_after_ks: LweCiphertextOwned<u64>,
+    pub(crate) buffer_lwe_after_ks: LweCiphertext64,
 }
 
 /// This allows to store and retrieve the `Buffers`

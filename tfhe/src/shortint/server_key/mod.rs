@@ -58,7 +58,7 @@ impl std::error::Error for CheckError {}
 /// sends it to the server so it can compute homomorphic circuits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ServerKey {
-    pub key_switching_key: LweKeyswitchKeyOwned<u64>,
+    pub key_switching_key: LweKeyswitchKey64,
     pub bootstrapping_key: FourierLweBootstrapKeyOwned,
     // Size of the message buffer
     pub message_modulus: MessageModulus,

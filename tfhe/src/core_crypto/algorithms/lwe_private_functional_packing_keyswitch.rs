@@ -21,10 +21,11 @@ pub fn private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext<
     KeyCont,
     InputCont,
     OutputCont,
+    const Q: u128,
 >(
     lwe_pfpksk: &LwePrivateFunctionalPackingKeyswitchKey<KeyCont>,
     output_glwe_ciphertext: &mut GlweCiphertext<OutputCont>,
-    input_lwe_ciphertext: &LweCiphertext<InputCont>,
+    input_lwe_ciphertext: &LweCiphertext<InputCont, Q>,
 ) where
     Scalar: UnsignedTorus,
     KeyCont: Container<Element = Scalar>,
@@ -77,10 +78,11 @@ pub fn private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphert
     KeyCont,
     InputCont,
     OutputCont,
+    const Q: u128,
 >(
     lwe_pfpksk: &LwePrivateFunctionalPackingKeyswitchKey<KeyCont>,
     output: &mut GlweCiphertext<OutputCont>,
-    input: &LweCiphertextList<InputCont>,
+    input: &LweCiphertextList<InputCont, Q>,
 ) where
     Scalar: UnsignedTorus,
     KeyCont: Container<Element = Scalar>,

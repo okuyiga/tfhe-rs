@@ -24,10 +24,13 @@ impl Memory {
     /// - The first element is the accumulator for bootstrap step.
     /// - The second element is a lwe buffer where the result of the of the bootstrap should be
     ///   written
-    fn as_buffers(
+    fn as_buffers<const Q: u128>(
         &mut self,
         server_key: &ServerKey,
-    ) -> (GlweCiphertextView<'_, u32>, LweCiphertextMutView<'_, u32>) {
+    ) -> (
+        GlweCiphertextView<'_, u32>,
+        LweCiphertextMutView<'_, u32, Q>,
+    ) {
         let num_elem_in_accumulator = server_key.bootstrapping_key.glwe_size().0
             * server_key.bootstrapping_key.polynomial_size().0;
         let num_elem_in_lwe = server_key
@@ -81,7 +84,7 @@ impl Memory {
 #[derive(Clone)]
 pub struct ServerKey {
     pub(crate) bootstrapping_key: FourierLweBootstrapKeyOwned,
-    pub(crate) key_switching_key: LweKeyswitchKeyOwned<u32>,
+    pub(crate) key_switching_key: LweKeyswitchKey32,
 }
 
 impl ServerKey {
@@ -115,7 +118,7 @@ impl ServerKey {
 #[derive(Clone)]
 pub struct CompressedServerKey {
     pub(crate) bootstrapping_key: SeededLweBootstrapKeyOwned<u32>,
-    pub(crate) key_switching_key: SeededLweKeyswitchKeyOwned<u32>,
+    pub(crate) key_switching_key: SeededLweKeyswitchKey32,
 }
 
 /// Perform ciphertext bootstraps on the CPU
@@ -245,9 +248,9 @@ impl Bootstrapper {
 
     pub(crate) fn bootstrap(
         &mut self,
-        input: &LweCiphertextOwned<u32>,
+        input: &LweCiphertext32,
         server_key: &ServerKey,
-    ) -> Result<LweCiphertextOwned<u32>, Box<dyn Error>> {
+    ) -> Result<LweCiphertext32, Box<dyn Error>> {
         let (accumulator, mut buffer_after_pbs) = self.memory.as_buffers(server_key);
 
         let fourier_bsk = &server_key.bootstrapping_key;
@@ -282,9 +285,9 @@ impl Bootstrapper {
 
     pub(crate) fn keyswitch(
         &mut self,
-        input: &LweCiphertextOwned<u32>,
+        input: &LweCiphertext32,
         server_key: &ServerKey,
-    ) -> Result<LweCiphertextOwned<u32>, Box<dyn Error>> {
+    ) -> Result<LweCiphertext32, Box<dyn Error>> {
         // Allocate the output of the KS
         let mut output = LweCiphertext::new(
             0u32,
@@ -301,7 +304,7 @@ impl Bootstrapper {
 
     pub(crate) fn bootstrap_keyswitch(
         &mut self,
-        mut ciphertext: LweCiphertextOwned<u32>,
+        mut ciphertext: LweCiphertext32,
         server_key: &ServerKey,
     ) -> Result<Ciphertext, Box<dyn Error>> {
         let (accumulator, mut buffer_lwe_after_pbs) = self.memory.as_buffers(server_key);

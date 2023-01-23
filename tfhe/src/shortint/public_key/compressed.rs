@@ -10,7 +10,7 @@ use std::fmt::Debug;
 /// A structure containing a public key.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompressedPublicKey {
-    pub(crate) lwe_public_key: SeededLwePublicKeyOwned<u64>,
+    pub(crate) lwe_public_key: SeededLwePublicKey64,
     pub parameters: Parameters,
 }
 
