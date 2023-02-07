@@ -2,8 +2,15 @@
 resolver = "2"
 members = ["tfhe", "tasks"]
 
+[profile.dev]
+opt-level = 3
+
 [profile.bench]
 lto = "fat"
+
+[profile.bench-dev]
+inherits = "bench"
+lto = false
 
 [profile.release]
 lto = "fat"

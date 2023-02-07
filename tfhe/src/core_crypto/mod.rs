@@ -16,6 +16,9 @@ pub mod entities;
 pub mod prelude;
 pub mod seeders;
 
+pub mod fft_128_impl;
+pub mod fft_split_impl;
+
 // TODO REFACTOR
 // For now this module is not refactored, it contains high performance code and will be refactored
 // at a later stage. It is self contained, allowing to put it in its own module in the meantime.
