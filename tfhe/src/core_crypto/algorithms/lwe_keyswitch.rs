@@ -3,7 +3,9 @@
 
 use crate::core_crypto::algorithms::misc::copy_from_convert;
 use crate::core_crypto::algorithms::slice_algorithms::*;
-use crate::core_crypto::commons::math::decomposition::SignedDecomposer;
+use crate::core_crypto::commons::math::decomposition::{
+    SignedDecomposer, SignedDecomposerNonNative,
+};
 use crate::core_crypto::commons::numeric::UnsignedInteger;
 use crate::core_crypto::commons::parameters::CiphertextModulus;
 use crate::core_crypto::commons::traits::*;
@@ -179,9 +181,10 @@ pub fn keyswitch_lwe_ciphertext<Scalar, KSKCont, InputCont, OutputCont>(
         *output_ct_128.get_mut_body().data = (*input_lwe_ciphertext.get_body().data).cast_into();
 
         // We instantiate a decomposer
-        let decomposer = SignedDecomposer::new(
+        let decomposer = SignedDecomposerNonNative::new(
             lwe_keyswitch_key.decomposition_base_log(),
             lwe_keyswitch_key.decomposition_level_count(),
+            ciphertext_modulus,
         );
 
         let ciphertext_modulus = ciphertext_modulus.get();

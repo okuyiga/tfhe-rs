@@ -5,7 +5,9 @@
 use crate::core_crypto::algorithms::*;
 use crate::core_crypto::commons::dispersion::DispersionParameter;
 use crate::core_crypto::commons::generators::EncryptionRandomGenerator;
-use crate::core_crypto::commons::math::decomposition::{DecompositionLevel, DecompositionTerm};
+use crate::core_crypto::commons::math::decomposition::{
+    DecompositionLevel, DecompositionTerm, DecompositionTermNonNative,
+};
 use crate::core_crypto::commons::math::random::ActivatedRandomGenerator;
 use crate::core_crypto::commons::parameters::*;
 use crate::core_crypto::commons::traits::*;
@@ -92,33 +94,65 @@ pub fn generate_lwe_keyswitch_key<Scalar, InputKeyCont, OutputKeyCont, KSKeyCont
 
     let decomp_base_log = lwe_keyswitch_key.decomposition_base_log();
     let decomp_level_count = lwe_keyswitch_key.decomposition_level_count();
+    let ciphertext_modulus = lwe_keyswitch_key.ciphertext_modulus();
 
     // The plaintexts used to encrypt a key element will be stored in this buffer
     let mut decomposition_plaintexts_buffer =
         PlaintextListOwned::new(Scalar::ZERO, PlaintextCount(decomp_level_count.0));
 
-    // Iterate over the input key elements and the destination lwe_keyswitch_key memory
-    for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
-        .as_ref()
-        .iter()
-        .zip(lwe_keyswitch_key.iter_mut())
-    {
-        // We fill the buffer with the powers of the key elmements
-        for (level, message) in (1..=decomp_level_count.0)
-            .map(DecompositionLevel)
-            .zip(decomposition_plaintexts_buffer.iter_mut())
+    if ciphertext_modulus.is_native_modulus() {
+        // Iterate over the input key elements and the destination lwe_keyswitch_key memory
+        for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
+            .as_ref()
+            .iter()
+            .zip(lwe_keyswitch_key.iter_mut())
         {
-            *message.0 = DecompositionTerm::new(level, decomp_base_log, *input_key_element)
-                .to_recomposition_summand();
-        }
+            // We fill the buffer with the powers of the key elmements
+            for (level, message) in (1..=decomp_level_count.0)
+                .map(DecompositionLevel)
+                .zip(decomposition_plaintexts_buffer.iter_mut())
+            {
+                *message.0 = DecompositionTerm::new(level, decomp_base_log, *input_key_element)
+                    .to_recomposition_summand();
+            }
 
-        encrypt_lwe_ciphertext_list(
-            output_lwe_sk,
-            &mut keyswitch_key_block,
-            &decomposition_plaintexts_buffer,
-            noise_parameters,
-            generator,
-        );
+            encrypt_lwe_ciphertext_list(
+                output_lwe_sk,
+                &mut keyswitch_key_block,
+                &decomposition_plaintexts_buffer,
+                noise_parameters,
+                generator,
+            );
+        }
+    } else {
+        // Iterate over the input key elements and the destination lwe_keyswitch_key memory
+        for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
+            .as_ref()
+            .iter()
+            .zip(lwe_keyswitch_key.iter_mut())
+        {
+            // We fill the buffer with the powers of the key elmements
+            for (level, message) in (1..=decomp_level_count.0)
+                .map(DecompositionLevel)
+                .zip(decomposition_plaintexts_buffer.iter_mut())
+            {
+                *message.0 = DecompositionTermNonNative::new(
+                    level,
+                    decomp_base_log,
+                    *input_key_element,
+                    ciphertext_modulus,
+                )
+                .to_recomposition_summand();
+            }
+
+            encrypt_lwe_ciphertext_list(
+                output_lwe_sk,
+                &mut keyswitch_key_block,
+                &decomposition_plaintexts_buffer,
+                noise_parameters,
+                generator,
+            );
+        }
     }
 }
 
@@ -248,6 +282,7 @@ pub fn generate_seeded_lwe_keyswitch_key<
 
     let decomp_base_log = lwe_keyswitch_key.decomposition_base_log();
     let decomp_level_count = lwe_keyswitch_key.decomposition_level_count();
+    let ciphertext_modulus = lwe_keyswitch_key.ciphertext_modulus();
 
     // The plaintexts used to encrypt a key element will be stored in this buffer
     let mut decomposition_plaintexts_buffer =
@@ -258,28 +293,59 @@ pub fn generate_seeded_lwe_keyswitch_key<
         noise_seeder,
     );
 
-    // Iterate over the input key elements and the destination lwe_keyswitch_key memory
-    for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
-        .as_ref()
-        .iter()
-        .zip(lwe_keyswitch_key.iter_mut())
-    {
-        // We fill the buffer with the powers of the key elmements
-        for (level, message) in (1..=decomp_level_count.0)
-            .map(DecompositionLevel)
-            .zip(decomposition_plaintexts_buffer.iter_mut())
+    if ciphertext_modulus.is_native_modulus() {
+        // Iterate over the input key elements and the destination lwe_keyswitch_key memory
+        for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
+            .as_ref()
+            .iter()
+            .zip(lwe_keyswitch_key.iter_mut())
         {
-            *message.0 = DecompositionTerm::new(level, decomp_base_log, *input_key_element)
-                .to_recomposition_summand();
-        }
+            // We fill the buffer with the powers of the key elmements
+            for (level, message) in (1..=decomp_level_count.0)
+                .map(DecompositionLevel)
+                .zip(decomposition_plaintexts_buffer.iter_mut())
+            {
+                *message.0 = DecompositionTerm::new(level, decomp_base_log, *input_key_element)
+                    .to_recomposition_summand();
+            }
 
-        encrypt_seeded_lwe_ciphertext_list_with_existing_generator(
-            output_lwe_sk,
-            &mut keyswitch_key_block,
-            &decomposition_plaintexts_buffer,
-            noise_parameters,
-            &mut generator,
-        );
+            encrypt_seeded_lwe_ciphertext_list_with_existing_generator(
+                output_lwe_sk,
+                &mut keyswitch_key_block,
+                &decomposition_plaintexts_buffer,
+                noise_parameters,
+                &mut generator,
+            );
+        }
+    } else {
+        // Iterate over the input key elements and the destination lwe_keyswitch_key memory
+        for (input_key_element, mut keyswitch_key_block) in input_lwe_sk
+            .as_ref()
+            .iter()
+            .zip(lwe_keyswitch_key.iter_mut())
+        {
+            // We fill the buffer with the powers of the key elmements
+            for (level, message) in (1..=decomp_level_count.0)
+                .map(DecompositionLevel)
+                .zip(decomposition_plaintexts_buffer.iter_mut())
+            {
+                *message.0 = DecompositionTermNonNative::new(
+                    level,
+                    decomp_base_log,
+                    *input_key_element,
+                    ciphertext_modulus,
+                )
+                .to_recomposition_summand();
+            }
+
+            encrypt_seeded_lwe_ciphertext_list_with_existing_generator(
+                output_lwe_sk,
+                &mut keyswitch_key_block,
+                &decomposition_plaintexts_buffer,
+                noise_parameters,
+                &mut generator,
+            );
+        }
     }
 }
 
