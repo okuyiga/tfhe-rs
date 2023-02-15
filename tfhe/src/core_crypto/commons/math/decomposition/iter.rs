@@ -164,9 +164,7 @@ where
         level: DecompositionLevelCount,
         ciphertext_modulus: CiphertextModulus<T>,
     ) -> SignedDecompositionIterNonNative<T> {
-        let input_128: u128 = input.cast_into();
-        let base_to_the_level = 1u128 << (base_log.0 * level.0);
-        let state = T::cast_from(input_128 * base_to_the_level / ciphertext_modulus.get());
+        let state = input;
 
         SignedDecompositionIterNonNative {
             base_log: base_log.0,

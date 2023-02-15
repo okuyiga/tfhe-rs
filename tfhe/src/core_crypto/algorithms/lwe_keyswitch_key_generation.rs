@@ -142,7 +142,7 @@ pub fn generate_lwe_keyswitch_key<Scalar, InputKeyCont, OutputKeyCont, KSKeyCont
                     *input_key_element,
                     ciphertext_modulus,
                 )
-                .to_recomposition_summand();
+                .to_recomposition_summand(decomp_level_count);
             }
 
             encrypt_lwe_ciphertext_list(
@@ -335,7 +335,7 @@ pub fn generate_seeded_lwe_keyswitch_key<
                     *input_key_element,
                     ciphertext_modulus,
                 )
-                .to_recomposition_summand();
+                .to_recomposition_summand(decomp_level_count);
             }
 
             encrypt_seeded_lwe_ciphertext_list_with_existing_generator(

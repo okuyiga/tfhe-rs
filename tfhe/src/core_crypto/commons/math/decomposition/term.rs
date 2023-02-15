@@ -1,6 +1,8 @@
 use crate::core_crypto::commons::math::decomposition::DecompositionLevel;
 use crate::core_crypto::commons::numeric::{Numeric, UnsignedInteger};
-use crate::core_crypto::commons::parameters::{CiphertextModulus, DecompositionBaseLog};
+use crate::core_crypto::commons::parameters::{
+    CiphertextModulus, DecompositionBaseLog, DecompositionLevelCount,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -146,10 +148,12 @@ where
     /// let output = decomposer.decompose(2u64.pow(19)).next().unwrap();
     /// assert_eq!(output.to_recomposition_summand(), 1048576);
     /// ```
-    pub fn to_recomposition_summand(&self) -> T {
-        let base_to_the_level = 1 << (self.base_log * self.level);
+    pub fn to_recomposition_summand(&self, level_count: DecompositionLevelCount) -> T {
+        let base_to_the_level_count = 1 << (self.base_log * level_count.0);
+        let interval = self.ciphertext_modulus.get() / base_to_the_level_count;
+
         let value_u128: u128 = self.value.cast_into();
-        let summand = value_u128 * self.ciphertext_modulus.get() / base_to_the_level;
+        let summand = value_u128 * (1 << (self.base_log * (level_count.0 - self.level))) * interval;
         T::cast_from(summand)
     }
 

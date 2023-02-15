@@ -142,6 +142,7 @@ where
     ///     assert!(signed_term <= half_basis);
     /// }
     /// assert_eq!(decomposer.decompose(1).count(), 3);
+    /// panic!("lol");
     /// ```
     pub fn decompose(&self, input: Scalar) -> SignedDecompositionIter<Scalar> {
         // Note that there would be no sense of making the decomposition on an input which was
@@ -303,18 +304,50 @@ where
     /// ```
     #[inline]
     pub fn closest_representable(&self, input: Scalar) -> Scalar {
+        // let base_to_the_level = 1 << (self.base_log * self.level_count);
+        // let half_interval = self.ciphertext_modulus.get() / 2;
+        // let input_u128: u128 = input.cast_into();
+        // let rounded = input_u128
+        //     .wrapping_mul(base_to_the_level)
+        //     .wrapping_add(half_interval)
+        //     .wrapping_div(self.ciphertext_modulus.get());
+        // Scalar::cast_from(
+        //     rounded
+        //         .wrapping_mul(self.ciphertext_modulus.get())
+        //         .wrapping_div(base_to_the_level),
+        // )
+
         let base_to_the_level = 1 << (self.base_log * self.level_count);
-        let half_interval = self.ciphertext_modulus.get() / 2;
+        let interval = self.ciphertext_modulus.get() / base_to_the_level;
+        let half_interval = self.ciphertext_modulus.get() / 2 / base_to_the_level;
+        // println!("{half_interval:?}");
         let input_u128: u128 = input.cast_into();
         let rounded = input_u128
-            .wrapping_mul(base_to_the_level)
             .wrapping_add(half_interval)
-            .wrapping_div(self.ciphertext_modulus.get());
-        Scalar::cast_from(
-            rounded
-                .wrapping_mul(self.ciphertext_modulus.get())
-                .wrapping_div(base_to_the_level),
-        )
+            .wrapping_div(interval);
+
+        println!("rounded: {rounded:?}");
+
+        let closest_representable = rounded
+            .wrapping_mul(self.ciphertext_modulus.get())
+            .wrapping_div(base_to_the_level);
+        println!("closest representable: {closest_representable}");
+        Scalar::cast_from(closest_representable)
+    }
+
+    #[inline]
+    pub fn get_state_for_decomp(&self, input: Scalar) -> Scalar {
+        let base_to_the_level = 1 << (self.base_log * self.level_count);
+        let interval = self.ciphertext_modulus.get() / base_to_the_level;
+        let half_interval = self.ciphertext_modulus.get() / 2 / base_to_the_level;
+        // println!("{half_interval:?}");
+        let input_u128: u128 = input.cast_into();
+        let rounded = input_u128
+            .wrapping_add(half_interval)
+            .wrapping_div(interval);
+
+        println!("rounded: {rounded:?}");
+        Scalar::cast_from(rounded)
     }
 
     /// Generate an iterator over the terms of the decomposition of the input.
@@ -354,7 +387,7 @@ where
         // Note that there would be no sense of making the decomposition on an input which was
         // not rounded to the closest representable first. We then perform it before decomposing.
         SignedDecompositionIterNonNative::new(
-            self.closest_representable(input),
+            self.get_state_for_decomp(input),
             DecompositionBaseLog(self.base_log),
             DecompositionLevelCount(self.level_count),
             self.ciphertext_modulus,
@@ -368,25 +401,88 @@ where
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```
+    /// use rand::Rng;
     /// use tfhe::core_crypto::commons::math::decomposition::SignedDecomposerNonNative;
     /// use tfhe::core_crypto::commons::parameters::{
     ///     CiphertextModulus, DecompositionBaseLog, DecompositionLevelCount,
     /// };
+    /// let mut rng = rand::thread_rng();
     /// let decomposer = SignedDecomposerNonNative::new(
     ///     DecompositionBaseLog(4),
     ///     DecompositionLevelCount(3),
     ///     CiphertextModulus::try_new((1 << 64) - (1 << 32) + 1).unwrap(),
     /// );
-    /// let val = 1u64 << 63;
-    /// let dec = decomposer.decompose(val);
-    /// let rec = decomposer.recompose(dec);
-    /// assert_eq!(decomposer.closest_representable(val), rec.unwrap());
-    /// ```
+    /// for _ in 0..1_000_000 {
+    ///     let val = (rng.gen::<u64>() % 8192) << 50 % (((1u128 << 64) - (1 << 32) + 1) as u64);
+    ///     let dec = decomposer.decompose(val);
+    ///     let rec = decomposer.recompose(dec);
+    ///     assert_eq!(decomposer.closest_representable(val), rec.unwrap());
+    /// }
+    // /// ```rust
+    // /// use rand::Rng;
+    // /// use tfhe::core_crypto::commons::math::decomposition::SignedDecomposerNonNative;
+    // /// use tfhe::core_crypto::commons::parameters::{
+    // ///     CiphertextModulus, DecompositionBaseLog, DecompositionLevelCount,
+    // /// };
+    // /// let decomposer = SignedDecomposerNonNative::new(
+    // ///     DecompositionBaseLog(4),
+    // ///     DecompositionLevelCount(3),
+    // ///     CiphertextModulus::try_new((1 << 64) - (1 << 32) + 1).unwrap(),
+    // /// );
+    // /// let mut rng = rand::thread_rng();
+    // /// let val = (1u64 << 63) + (1 << 31) + rng.gen::<u64>() % (1 << 31);
+    // /// let dec = decomposer.decompose(val);
+    // /// let rec = decomposer.recompose(dec);
+    // /// assert_eq!(decomposer.closest_representable(val), rec.unwrap());
+    // /// ```
+    // /// ```
+    // /// use rand::Rng;
+    // /// use tfhe::core_crypto::commons::math::decomposition::SignedDecomposerNonNative;
+    // /// use tfhe::core_crypto::commons::parameters::{
+    // ///     CiphertextModulus, DecompositionBaseLog, DecompositionLevelCount,
+    // /// };
+    // /// let mut rng = rand::thread_rng();
+    // /// let decomposer = SignedDecomposerNonNative::new(
+    // ///     DecompositionBaseLog(4),
+    // ///     DecompositionLevelCount(3),
+    // ///     CiphertextModulus::try_new((1 << 64) - (1 << 32) + 1).unwrap(),
+    // /// );
+    // /// for _ in 0..1_000_000 {
+    // ///     let val = (rng.gen::<u64>() % 4096) << 51 % (((1u128 << 64) - (1 << 32) + 1) as u64);
+    // ///     let dec = decomposer.decompose(val);
+    // ///     let rec = decomposer.recompose(dec);
+    // ///     assert_eq!(decomposer.closest_representable(val), rec.unwrap());
+    // /// }
+    // /// ```
+    // /// ```
+    // /// use rand::Rng;
+    // /// use tfhe::core_crypto::commons::math::decomposition::SignedDecomposerNonNative;
+    // /// use tfhe::core_crypto::commons::parameters::{
+    // ///     CiphertextModulus, DecompositionBaseLog, DecompositionLevelCount,
+    // /// };
+    // /// let mut rng = rand::thread_rng();
+    // /// let decomposer = SignedDecomposerNonNative::new(
+    // ///     DecompositionBaseLog(4),
+    // ///     DecompositionLevelCount(3),
+    // ///     CiphertextModulus::try_new((1 << 64) - (1 << 32) + 1).unwrap(),
+    // /// );
+    // /// for _ in 0..1_000_000 {
+    // ///     let val = rng.gen::<u64>() % (((1u128 << 64) - (1 << 32) + 1) as u64);
+    // ///     let dec = decomposer.decompose(val);
+    // ///     let rec = decomposer.recompose(dec);
+    // ///     assert_eq!(decomposer.closest_representable(val), rec.unwrap());
+    // /// }
+    // /// ```
     pub fn recompose(&self, decomp: SignedDecompositionIterNonNative<Scalar>) -> Option<Scalar> {
         if decomp.is_fresh() {
             Some(decomp.fold(Scalar::ZERO, |acc, term| {
-                acc.wrapping_add(term.to_recomposition_summand())
+                // println!("term: {term:?}");
+                // println!(
+                //     "Recomposition summand: {:?}",
+                //     term.to_recomposition_summand(self.level_count())
+                // );
+                acc.wrapping_add(term.to_recomposition_summand(self.level_count()))
             }))
         } else {
             None
