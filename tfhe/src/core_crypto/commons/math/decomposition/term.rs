@@ -1,3 +1,4 @@
+use crate::core_crypto::algorithms::misc::*;
 use crate::core_crypto::commons::math::decomposition::DecompositionLevel;
 use crate::core_crypto::commons::numeric::{Numeric, UnsignedInteger};
 use crate::core_crypto::commons::parameters::{
@@ -146,14 +147,19 @@ where
     ///     CiphertextModulus::try_new(1 << 32).unwrap(),
     /// );
     /// let output = decomposer.decompose(2u64.pow(19)).next().unwrap();
-    /// assert_eq!(output.to_recomposition_summand(), 1048576);
+    /// assert_eq!(
+    ///     output.to_recomposition_summand(DecompositionLevelCount(3)),
+    ///     1048576
+    /// );
     /// ```
     pub fn to_recomposition_summand(&self, level_count: DecompositionLevelCount) -> T {
         let base_to_the_level_count = 1 << (self.base_log * level_count.0);
-        let interval = self.ciphertext_modulus.get() / base_to_the_level_count;
+        let unit_interval =
+            divide_round_to_u128(self.ciphertext_modulus.get(), base_to_the_level_count);
 
         let value_u128: u128 = self.value.cast_into();
-        let summand = value_u128 * (1 << (self.base_log * (level_count.0 - self.level))) * interval;
+        let summand =
+            value_u128 * (1 << (self.base_log * (level_count.0 - self.level))) * unit_interval;
         T::cast_from(summand)
     }
 

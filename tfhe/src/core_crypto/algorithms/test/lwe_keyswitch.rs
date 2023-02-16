@@ -16,7 +16,8 @@ fn lwe_encrypt_ks_decrypt_custom_mod<Scalar: UnsignedTorus>(params: TestParams<S
     const NB_TESTS: usize = 10;
     let msg_modulus = Scalar::ONE.shl(message_modulus_log.0);
     let mut msg = msg_modulus;
-    let delta: Scalar = (encoding_with_padding / cast_into_u128(msg_modulus)).cast_into();
+    let delta: Scalar =
+        divide_round(encoding_with_padding, cast_into_u128(msg_modulus)).cast_into();
 
     while msg != Scalar::ZERO {
         msg = msg.wrapping_sub(Scalar::ONE);

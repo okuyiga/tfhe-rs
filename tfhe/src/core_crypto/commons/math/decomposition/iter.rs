@@ -1,3 +1,4 @@
+use crate::core_crypto::algorithms::misc::divide_round;
 use crate::core_crypto::commons::math::decomposition::{
     DecompositionLevel, DecompositionTerm, DecompositionTermNonNative,
 };
@@ -164,7 +165,10 @@ where
         level: DecompositionLevelCount,
         ciphertext_modulus: CiphertextModulus<T>,
     ) -> SignedDecompositionIterNonNative<T> {
-        let state = input;
+        let base_to_the_level = 1 << (base_log.0 * level.0);
+        let interval: T = T::cast_from(divide_round(ciphertext_modulus.get(), base_to_the_level));
+
+        let state = divide_round(input, interval);
 
         SignedDecompositionIterNonNative {
             base_log: base_log.0,

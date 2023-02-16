@@ -156,7 +156,7 @@ pub fn get_encoding_with_padding<Scalar: UnsignedInteger>(
     if ciphertext_modulus.is_native_modulus() {
         1 << (Scalar::BITS - 1)
     } else {
-        ciphertext_modulus.get() / 2
+        ciphertext_modulus.get()
     }
 }
 
