@@ -153,13 +153,35 @@ where
     /// );
     /// ```
     pub fn to_recomposition_summand(&self, level_count: DecompositionLevelCount) -> T {
-        let base_to_the_level_count = 1 << (self.base_log * level_count.0);
-        let unit_interval =
-            divide_round_to_u128(self.ciphertext_modulus.get(), base_to_the_level_count);
+        // Marc notes
+        // let ciphertext_mod = self.ciphertext_modulus.get();
+        // let log_2_ceil = u128::BITS - 1 - ciphertext_mod.leading_zeros();
+        // let value_u128: u128 = self.value.cast_into();
+        // let summand = value_u128 << (log_2_ceil as usize - self.base_log * self.level);
+        // T::cast_from(summand)
+
+        //////////////////////////////////////////////////////////////////////
+
+        // * B^(l - j) * round(q / B^l)
+        // let base_to_the_level_count = 1 << (self.base_log * level_count.0);
+        // let unit_interval =
+        //     divide_round_to_u128(self.ciphertext_modulus.get(), base_to_the_level_count);
+        // // let unit_interval = self.ciphertext_modulus.get() / base_to_the_level_count;
+
+        // let value_u128: u128 = self.value.cast_into();
+        // let summand =
+        //     value_u128 * (1 << (self.base_log * (level_count.0 - self.level))) * unit_interval;
+        // T::cast_from(summand)
+
+        //////////////////////////////////////////////////////////////////////
+
+        // * round(q / B^j)
+        let base_to_the_level = 1 << (self.base_log * self.level);
+        let unit_interval = divide_round(self.ciphertext_modulus.get(), base_to_the_level);
+        // let unit_interval = self.ciphertext_modulus.get() / base_to_the_level_count;
 
         let value_u128: u128 = self.value.cast_into();
-        let summand =
-            value_u128 * (1 << (self.base_log * (level_count.0 - self.level))) * unit_interval;
+        let summand = value_u128 * unit_interval;
         T::cast_from(summand)
     }
 

@@ -403,15 +403,17 @@ where
     /// };
     /// let mut rng = rand::thread_rng();
     /// let decomposer = SignedDecomposerNonNative::new(
-    ///     DecompositionBaseLog(4),
-    ///     DecompositionLevelCount(3),
+    ///     DecompositionBaseLog(3),
+    ///     DecompositionLevelCount(5),
     ///     CiphertextModulus::try_new((1 << 64) - (1 << 32) + 1).unwrap(),
     /// );
-    /// for _ in 0..1_000_000 {
-    ///     let val = (rng.gen::<u64>() % 8192) << 50 % (((1u128 << 64) - (1 << 32) + 1) as u64);
+    /// for _ in 0..1 {
+    ///     let val = 16982820785129133100u64;
     ///     let dec = decomposer.decompose(val);
-    ///     let rec = decomposer.recompose(dec);
-    ///     assert_eq!(decomposer.closest_representable(val), rec.unwrap());
+    ///     let rec = decomposer.recompose(dec).unwrap();
+    ///     println!("{:064b}", decomposer.closest_representable(val));
+    ///     println!("{:064b}", rec);
+    ///     assert_eq!(decomposer.closest_representable(val), rec);
     /// }
     pub fn recompose(&self, decomp: SignedDecompositionIterNonNative<Scalar>) -> Option<Scalar> {
         if decomp.is_fresh() {

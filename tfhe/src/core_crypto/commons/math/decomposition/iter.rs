@@ -134,6 +134,7 @@ fn decompose_one_level<S: UnsignedInteger>(base_log: usize, state: &mut S, mod_b
 ///
 /// This iterator yields the decomposition in reverse order. That means that the highest level
 /// will be yielded first.
+#[derive(Clone)]
 pub struct SignedDecompositionIterNonNative<T>
 where
     T: UnsignedInteger,
@@ -266,6 +267,8 @@ fn decompose_one_level_non_native<S: UnsignedInteger>(
     state: &mut S,
     mod_b_mask: S,
 ) -> S {
+    println!("decomposing: {state:?}");
+    println!("decomposing: {state:064b}");
     let res = *state & mod_b_mask;
     *state >>= base_log;
     let mut carry = (res.wrapping_sub(S::ONE) | *state) & res;

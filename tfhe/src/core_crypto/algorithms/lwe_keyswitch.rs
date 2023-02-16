@@ -193,11 +193,18 @@ pub fn keyswitch_lwe_ciphertext<Scalar, KSKCont, InputCont, OutputCont>(
             .iter()
             .zip(input_lwe_ciphertext.get_mask().as_ref())
         {
+            println!("input_mask_element: {input_mask_element:?}");
+            println!("input_mask_element: {input_mask_element:064b}");
             let decomposition_iter = decomposer.decompose(input_mask_element);
+            let recomposed = decomposer.recompose(decomposition_iter.clone()).unwrap();
+            println!("recomposed: {recomposed:?}");
+            println!("recomposed: {recomposed:064b}");
             // loop over the number of levels in reverse (from highest to lowest)
             for (level_key_ciphertext, decomposed) in
                 keyswitch_key_block.iter().rev().zip(decomposition_iter)
             {
+                println!("decomposed: {:?}", decomposed.value());
+                println!("decomposed: {:064b}", decomposed.value());
                 copy_from_convert(&mut level_ct_128, &level_key_ciphertext);
 
                 slice_wrapping_sub_scalar_mul_assign_custom_modulus(
