@@ -1,5 +1,6 @@
 use crate::shortint::keycache::KEY_CACHE;
 use crate::shortint::parameters::*;
+use crate::shortint::CiphertextBig;
 use paste::paste;
 use rand::Rng;
 
@@ -181,7 +182,7 @@ fn shortint_encrypt_decrypt(param: Parameters) {
     for _ in 0..NB_TEST {
         let clear = rng.gen::<u64>() % modulus;
 
-        let ct = cks.encrypt(clear);
+        let ct: CiphertextBig = cks.encrypt(clear);
 
         // decryption of ct_zero
         let dec = cks.decrypt(&ct);
@@ -288,7 +289,7 @@ fn shortint_keyswitch_programmable_bootstrap(param: Parameters) {
         //define the accumulator as identity
         let acc = sks.generate_accumulator(|n| n % modulus);
         // add the two ciphertexts
-        let ct_res = sks.keyswitch_programmable_bootstrap(&ctxt_0, &acc);
+        let ct_res = sks.apply_lookup_table(&ctxt_0, &acc);
 
         // decryption of ct_res
         let dec_res = cks.decrypt(&ct_res);
@@ -405,7 +406,7 @@ fn shortint_generate_accumulator(param: Parameters) {
         // encryption of an integer
         let ct = cks.encrypt(clear);
 
-        let ct_res = sks.keyswitch_programmable_bootstrap(&ct, &acc);
+        let ct_res = sks.apply_lookup_table(&ct, &acc);
 
         // decryption of ct_res
         let dec_res = cks.decrypt(&ct_res);

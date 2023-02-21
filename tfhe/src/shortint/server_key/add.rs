@@ -2,7 +2,7 @@ use super::ServerKey;
 use crate::shortint::engine::ShortintEngine;
 use crate::shortint::server_key::CheckError;
 use crate::shortint::server_key::CheckError::CarryFull;
-use crate::shortint::Ciphertext;
+use crate::shortint::CiphertextNew;
 
 impl ServerKey {
     /// Compute homomorphically an addition between two ciphertexts encrypting integer values.
@@ -32,8 +32,25 @@ impl ServerKey {
     /// // Decrypt:
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(msg1 + msg2, res);
+    ///
+    /// // Same thing using the small key for encryption
+    /// let msg1 = 1;
+    /// let msg2 = 2;
+    /// let ct1 = cks.encrypt_small(msg1);
+    /// let ct2 = cks.encrypt_small(msg2);
+    ///
+    /// // Compute homomorphically an addition:
+    /// let ct_res = sks.unchecked_add(&ct1, &ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(msg1 + msg2, res);
     /// ```
-    pub fn unchecked_add(&self, ct_left: &Ciphertext, ct_right: &Ciphertext) -> Ciphertext {
+    pub fn unchecked_add<const OP_ORDER: u8>(
+        &self,
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.unchecked_add(ct_left, ct_right).unwrap()
         })
@@ -66,8 +83,22 @@ impl ServerKey {
     /// // Decrypt:
     /// let two = cks.decrypt(&ct_left);
     /// assert_eq!(msg + msg, two);
+    ///
+    /// let mut ct_left = cks.encrypt_small(msg);
+    /// let ct_right = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an addition:
+    /// sks.unchecked_add_assign(&mut ct_left, &ct_right);
+    ///
+    /// // Decrypt:
+    /// let two = cks.decrypt(&ct_left);
+    /// assert_eq!(msg + msg, two);
     /// ```
-    pub fn unchecked_add_assign(&self, ct_left: &mut Ciphertext, ct_right: &Ciphertext) {
+    pub fn unchecked_add_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.unchecked_add_assign(ct_left, ct_right).unwrap()
         })
@@ -97,8 +128,21 @@ impl ServerKey {
     /// let can_be_added = sks.is_add_possible(&ct_left, &ct_right);
     ///
     /// assert_eq!(can_be_added, true);
+    ///
+    /// // Encrypt two messages:
+    /// let ct_left = cks.encrypt_small(msg);
+    /// let ct_right = cks.encrypt_small(msg);
+    ///
+    /// // Check if we can perform an addition
+    /// let can_be_added = sks.is_add_possible(&ct_left, &ct_right);
+    ///
+    /// assert_eq!(can_be_added, true);
     /// ```
-    pub fn is_add_possible(&self, ct_left: &Ciphertext, ct_right: &Ciphertext) -> bool {
+    pub fn is_add_possible<const OP_ORDER: u8>(
+        &self,
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> bool {
         let final_operation_count = ct_left.degree.0 + ct_right.degree.0;
         final_operation_count <= self.max_degree.0
     }
@@ -131,12 +175,25 @@ impl ServerKey {
     /// let ct_res = ct_res.unwrap();
     /// let clear_res = cks.decrypt(&ct_res);
     /// assert_eq!(clear_res, msg + msg);
+    ///
+    /// // Encrypt two messages:
+    /// let ct1 = cks.encrypt_small(msg);
+    /// let ct2 = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an addition:
+    /// let ct_res = sks.checked_add(&ct1, &ct2);
+    ///
+    /// assert!(ct_res.is_ok());
+    ///
+    /// let ct_res = ct_res.unwrap();
+    /// let clear_res = cks.decrypt(&ct_res);
+    /// assert_eq!(clear_res, msg + msg);
     /// ```
-    pub fn checked_add(
+    pub fn checked_add<const OP_ORDER: u8>(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-    ) -> Result<Ciphertext, CheckError> {
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> Result<CiphertextNew<OP_ORDER>, CheckError> {
         if self.is_add_possible(ct_left, ct_right) {
             let ct_result = self.unchecked_add(ct_left, ct_right);
             Ok(ct_result)
@@ -172,11 +229,23 @@ impl ServerKey {
     ///
     /// let clear_res = cks.decrypt(&ct_left);
     /// assert_eq!(clear_res, msg + msg);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct_left = cks.encrypt_small(msg);
+    /// let ct_right = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an addition:
+    /// let res = sks.checked_add_assign(&mut ct_left, &ct_right);
+    ///
+    /// assert!(res.is_ok());
+    ///
+    /// let clear_res = cks.decrypt(&ct_left);
+    /// assert_eq!(clear_res, msg + msg);
     /// ```
-    pub fn checked_add_assign(
+    pub fn checked_add_assign<const OP_ORDER: u8>(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
     ) -> Result<(), CheckError> {
         if self.is_add_possible(ct_left, ct_right) {
             self.unchecked_add_assign(ct_left, ct_right);
@@ -211,8 +280,23 @@ impl ServerKey {
     /// // Decrypt:
     /// let two = cks.decrypt(&ct_res);
     /// assert_eq!(msg + msg, two);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.encrypt_small(msg);
+    /// let mut ct2 = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an addition:
+    /// let ct_res = sks.smart_add(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let two = cks.decrypt(&ct_res);
+    /// assert_eq!(msg + msg, two);
     /// ```
-    pub fn smart_add(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) -> Ciphertext {
+    pub fn smart_add<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_add(self, ct_left, ct_right).unwrap()
         })
@@ -231,10 +315,10 @@ impl ServerKey {
     /// // Generate the client key and the server key:
     /// let (cks, sks) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
     ///
-    /// // Encrypt two messages:
     /// let msg1 = 15;
     /// let msg2 = 3;
     ///
+    /// // Encrypt two messages:
     /// let mut ct1 = cks.unchecked_encrypt(msg1);
     /// let mut ct2 = cks.encrypt(msg2);
     ///
@@ -247,8 +331,26 @@ impl ServerKey {
     /// // 15 + 3 mod 4 -> 3 + 3 mod 4 -> 2 mod 4
     /// let modulus = cks.parameters.message_modulus.0 as u64;
     /// assert_eq!((msg2 + msg1) % modulus, two);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.unchecked_encrypt_small(msg1);
+    /// let mut ct2 = cks.encrypt_small(msg2);
+    ///
+    /// // Compute homomorphically an addition:
+    /// sks.smart_add_assign(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let two = cks.decrypt(&ct1);
+    ///
+    /// // 15 + 3 mod 4 -> 3 + 3 mod 4 -> 2 mod 4
+    /// let modulus = cks.parameters.message_modulus.0 as u64;
+    /// assert_eq!((msg2 + msg1) % modulus, two);
     /// ```
-    pub fn smart_add_assign(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) {
+    pub fn smart_add_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_add_assign(self, ct_left, ct_right).unwrap()
         })

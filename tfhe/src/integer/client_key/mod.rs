@@ -11,7 +11,7 @@ use crate::integer::ciphertext::{CrtCiphertext, RadixCiphertext};
 use crate::integer::client_key::utils::i_crt;
 use crate::shortint::parameters::MessageModulus;
 use crate::shortint::{
-    Ciphertext as ShortintCiphertext, ClientKey as ShortintClientKey,
+    CiphertextBig as ShortintCiphertext, ClientKey as ShortintClientKey,
     Parameters as ShortintParameters,
 };
 use serde::{Deserialize, Serialize};

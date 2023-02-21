@@ -1,5 +1,5 @@
 //! This module implements the ciphertext structures.
-use crate::shortint::Ciphertext as ShortintCiphertext;
+use crate::shortint::CiphertextBig as ShortintCiphertext;
 use serde::{Deserialize, Serialize};
 
 /// Structure containing a ciphertext in radix decomposition.

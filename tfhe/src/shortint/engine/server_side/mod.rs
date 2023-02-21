@@ -5,8 +5,11 @@ use crate::core_crypto::fft_impl::crypto::bootstrap::FourierLweBootstrapKey;
 use crate::core_crypto::fft_impl::math::fft::Fft;
 use crate::shortint::ciphertext::Degree;
 use crate::shortint::engine::EngineResult;
-use crate::shortint::server_key::{Accumulator, MaxDegree};
-use crate::shortint::{Ciphertext, ClientKey, CompressedServerKey, ServerKey};
+use crate::shortint::server_key::{AccumulatorOwned, MaxDegree};
+use crate::shortint::{
+    CiphertextBig, CiphertextNew, CiphertextOpOrder, CiphertextSmall, ClientKey,
+    CompressedServerKey, ServerKey,
+};
 use std::cmp::min;
 
 mod add;
@@ -38,7 +41,7 @@ impl ShortintEngine {
     ) -> EngineResult<ServerKey> {
         let bootstrap_key: LweBootstrapKeyOwned<u64> =
             par_allocate_and_generate_new_lwe_bootstrap_key(
-                &cks.lwe_secret_key_after_ks,
+                &cks.small_lwe_secret_key,
                 &cks.glwe_secret_key,
                 cks.parameters.pbs_base_log,
                 cks.parameters.pbs_level,
@@ -74,8 +77,8 @@ impl ShortintEngine {
 
         // Creation of the key switching key
         let key_switching_key = allocate_and_generate_new_lwe_keyswitch_key(
-            &cks.lwe_secret_key,
-            &cks.lwe_secret_key_after_ks,
+            &cks.large_lwe_secret_key,
+            &cks.small_lwe_secret_key,
             cks.parameters.ks_base_log,
             cks.parameters.ks_level,
             cks.parameters.lwe_modular_std_dev,
@@ -111,7 +114,7 @@ impl ShortintEngine {
     ) -> EngineResult<CompressedServerKey> {
         #[cfg(not(feature = "__wasm_api"))]
         let bootstrapping_key = par_allocate_and_generate_new_seeded_lwe_bootstrap_key(
-            &cks.lwe_secret_key_after_ks,
+            &cks.small_lwe_secret_key,
             &cks.glwe_secret_key,
             cks.parameters.pbs_base_log,
             cks.parameters.pbs_level,
@@ -121,7 +124,7 @@ impl ShortintEngine {
 
         #[cfg(feature = "__wasm_api")]
         let bootstrapping_key = allocate_and_generate_new_seeded_lwe_bootstrap_key(
-            &cks.lwe_secret_key_after_ks,
+            &cks.small_lwe_secret_key,
             &cks.glwe_secret_key,
             cks.parameters.pbs_base_log,
             cks.parameters.pbs_level,
@@ -131,8 +134,8 @@ impl ShortintEngine {
 
         // Creation of the key switching key
         let key_switching_key = allocate_and_generate_new_seeded_lwe_keyswitch_key(
-            &cks.lwe_secret_key,
-            &cks.lwe_secret_key_after_ks,
+            &cks.large_lwe_secret_key,
+            &cks.small_lwe_secret_key,
             cks.parameters.ks_base_log,
             cks.parameters.ks_level,
             cks.parameters.lwe_modular_std_dev,
@@ -153,7 +156,7 @@ impl ShortintEngine {
         &mut self,
         server_key: &ServerKey,
         f: F,
-    ) -> EngineResult<Accumulator>
+    ) -> EngineResult<AccumulatorOwned>
     where
         F: Fn(u64) -> u64,
     {
@@ -163,8 +166,8 @@ impl ShortintEngine {
     pub(crate) fn keyswitch_bootstrap(
         &mut self,
         server_key: &ServerKey,
-        ct: &Ciphertext,
-    ) -> EngineResult<Ciphertext> {
+        ct: &CiphertextBig,
+    ) -> EngineResult<CiphertextBig> {
         let mut ct_in = ct.clone();
         self.keyswitch_bootstrap_assign(server_key, &mut ct_in)?;
         Ok(ct_in)
@@ -173,7 +176,7 @@ impl ShortintEngine {
     pub(crate) fn keyswitch_bootstrap_assign(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextBig,
     ) -> EngineResult<()> {
         // Compute the programmable bootstrapping with fixed test polynomial
         let (mut ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
@@ -204,31 +207,33 @@ impl ShortintEngine {
         programmable_bootstrap_lwe_ciphertext_mem_optimized(
             &ciphertext_buffers.buffer_lwe_after_ks,
             &mut ct.ct,
-            &ciphertext_buffers.accumulator,
+            &ciphertext_buffers.accumulator.acc,
             fourier_bsk,
             fft,
             stack,
         );
 
+        ct.degree = ciphertext_buffers.accumulator.degree;
+
         Ok(())
     }
 
-    pub(crate) fn keyswitch_programmable_bootstrap(
-        &mut self,
-        server_key: &ServerKey,
-        ct: &Ciphertext,
-        acc: &Accumulator,
-    ) -> EngineResult<Ciphertext> {
-        let mut ct_res = ct.clone();
-        self.keyswitch_programmable_bootstrap_assign(server_key, &mut ct_res, acc)?;
-        Ok(ct_res)
-    }
+    // pub(crate) fn keyswitch_programmable_bootstrap(
+    //     &mut self,
+    //     server_key: &ServerKey,
+    //     ct: &CiphertextBig,
+    //     acc: &AccumulatorOwned,
+    // ) -> EngineResult<CiphertextBig> {
+    //     let mut ct_res = ct.clone();
+    //     self.keyswitch_programmable_bootstrap_assign(server_key, &mut ct_res, acc)?;
+    //     Ok(ct_res)
+    // }
 
     pub(crate) fn keyswitch_programmable_bootstrap_assign(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
-        acc: &Accumulator,
+        ct: &mut CiphertextBig,
+        acc: &AccumulatorOwned,
     ) -> EngineResult<()> {
         // Compute the programmable bootstrapping with fixed test polynomial
         let (mut ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
@@ -273,10 +278,10 @@ impl ShortintEngine {
     pub(crate) fn keyswitch_programmable_bootstrap_bivariate(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-        acc: &Accumulator,
-    ) -> EngineResult<Ciphertext> {
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
+        acc: &AccumulatorOwned,
+    ) -> EngineResult<CiphertextBig> {
         let mut ct_res = ct_left.clone();
         self.keyswitch_programmable_bootstrap_bivariate_assign(
             server_key,
@@ -290,9 +295,9 @@ impl ShortintEngine {
     pub(crate) fn keyswitch_programmable_bootstrap_bivariate_assign(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
-        acc: &Accumulator,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
+        acc: &AccumulatorOwned,
     ) -> EngineResult<()> {
         let modulus = (ct_right.degree.0 + 1) as u64;
 
@@ -312,7 +317,7 @@ impl ShortintEngine {
         &mut self,
         server_key: &ServerKey,
         f: F,
-    ) -> EngineResult<Accumulator>
+    ) -> EngineResult<AccumulatorOwned>
     where
         F: Fn(u64, u64) -> u64,
     {
@@ -322,10 +327,10 @@ impl ShortintEngine {
     pub(crate) fn unchecked_functional_bivariate_pbs<F>(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
         f: F,
-    ) -> EngineResult<Ciphertext>
+    ) -> EngineResult<CiphertextBig>
     where
         F: Fn(u64) -> u64,
     {
@@ -334,11 +339,11 @@ impl ShortintEngine {
         Ok(ct_res)
     }
 
-    pub(crate) fn unchecked_functional_bivariate_pbs_assign<F>(
+    pub(crate) fn unchecked_functional_bivariate_pbs_assign<const OP_ORDER: u8, F>(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
         f: F,
     ) -> EngineResult<()>
     where
@@ -356,32 +361,32 @@ impl ShortintEngine {
         let acc = self.generate_accumulator(server_key, f)?;
 
         // Compute the PBS
-        self.keyswitch_programmable_bootstrap_assign(server_key, ct_left, &acc)?;
+        self.apply_lookup_table_assign(server_key, ct_left, &acc)?;
         Ok(())
     }
 
     // Those are currently not used in shortint, we therefore disable the warning when not compiling
     // the C API
     #[cfg_attr(not(feature = "__c_api"), allow(dead_code))]
-    pub(crate) fn smart_bivariate_pbs(
+    pub(crate) fn smart_bivariate_pbs<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &Ciphertext,
-        ct_right: &mut Ciphertext,
-        acc: &Accumulator,
-    ) -> EngineResult<Ciphertext> {
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
+    ) -> EngineResult<CiphertextNew<OP_ORDER>> {
         let mut ct_res = ct_left.clone();
         self.smart_bivariate_pbs_assign(server_key, &mut ct_res, ct_right, acc)?;
         Ok(ct_res)
     }
 
     #[cfg_attr(not(feature = "__c_api"), allow(dead_code))]
-    pub(crate) fn smart_bivariate_pbs_assign(
+    pub(crate) fn smart_bivariate_pbs_assign<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &mut Ciphertext,
-        ct_right: &mut Ciphertext,
-        acc: &Accumulator,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
     ) -> EngineResult<()> {
         if !server_key.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             self.message_extract_assign(server_key, ct_left)?;
@@ -392,12 +397,12 @@ impl ShortintEngine {
     }
 
     #[cfg_attr(not(feature = "__c_api"), allow(dead_code))]
-    pub(crate) fn unchecked_bivariate_pbs_assign(
+    pub(crate) fn unchecked_bivariate_pbs_assign<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
-        acc: &Accumulator,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
     ) -> EngineResult<()> {
         let modulus = (ct_right.degree.0 + 1) as u64;
 
@@ -408,14 +413,168 @@ impl ShortintEngine {
         self.unchecked_add_assign(ct_left, ct_right)?;
 
         // Compute the PBS
-        self.keyswitch_programmable_bootstrap_assign(server_key, ct_left, acc)?;
+        self.apply_lookup_table_assign(server_key, ct_left, acc)?;
+        Ok(())
+    }
+
+    pub(crate) fn programmable_bootstrap_keyswitch_assign(
+        &mut self,
+        server_key: &ServerKey,
+        ct: &mut CiphertextSmall,
+        acc: &AccumulatorOwned,
+    ) -> EngineResult<()> {
+        let (mut ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
+
+        let fourier_bsk = &server_key.bootstrapping_key;
+
+        let fft = Fft::new(fourier_bsk.polynomial_size());
+        let fft = fft.as_view();
+        buffers.resize(
+            programmable_bootstrap_lwe_ciphertext_mem_optimized_requirement::<u64>(
+                fourier_bsk.glwe_size(),
+                fourier_bsk.polynomial_size(),
+                fft,
+            )
+            .unwrap()
+            .unaligned_bytes_required(),
+        );
+        let stack = buffers.stack();
+
+        // Compute a bootstrap
+        programmable_bootstrap_lwe_ciphertext_mem_optimized(
+            &ct.ct,
+            &mut ciphertext_buffers.buffer_lwe_after_pbs,
+            &acc.acc,
+            fourier_bsk,
+            fft,
+            stack,
+        );
+
+        // Compute a key switch
+        keyswitch_lwe_ciphertext(
+            &server_key.key_switching_key,
+            &ciphertext_buffers.buffer_lwe_after_pbs,
+            &mut ct.ct,
+        );
+
+        ct.degree = acc.degree;
+
+        Ok(())
+    }
+
+    pub(crate) fn bootstrap_keyswitch_assign(
+        &mut self,
+        server_key: &ServerKey,
+        ct: &mut CiphertextSmall,
+    ) -> EngineResult<()> {
+        // Compute the programmable bootstrapping with fixed test polynomial
+        let (mut ciphertext_buffers, buffers) = self.buffers_for_key(server_key);
+
+        let fourier_bsk = &server_key.bootstrapping_key;
+
+        let fft = Fft::new(fourier_bsk.polynomial_size());
+        let fft = fft.as_view();
+        buffers.resize(
+            programmable_bootstrap_lwe_ciphertext_mem_optimized_requirement::<u64>(
+                fourier_bsk.glwe_size(),
+                fourier_bsk.polynomial_size(),
+                fft,
+            )
+            .unwrap()
+            .unaligned_bytes_required(),
+        );
+        let stack = buffers.stack();
+
+        // Compute a bootstrap
+        programmable_bootstrap_lwe_ciphertext_mem_optimized(
+            &ciphertext_buffers.buffer_lwe_after_pbs,
+            &mut ct.ct,
+            &ciphertext_buffers.accumulator.acc,
+            fourier_bsk,
+            fft,
+            stack,
+        );
+
+        // Compute a keyswitch
+        keyswitch_lwe_ciphertext(
+            &server_key.key_switching_key,
+            &ct.ct,
+            &mut ciphertext_buffers.buffer_lwe_after_pbs,
+        );
+
+        ct.degree = ciphertext_buffers.accumulator.degree;
+
+        Ok(())
+    }
+
+    pub(crate) fn apply_lookup_table_assign<const OP_ORDER: u8>(
+        &mut self,
+        server_key: &ServerKey,
+        ct: &mut CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
+    ) -> EngineResult<()> {
+        let op_order: CiphertextOpOrder = OP_ORDER.try_into().unwrap();
+
+        // We know the OP_ORDER corresponds to the CiphertextBig or CiphertextSmall and the memory
+        // layout is the same as the type information is just encoded in a const generics
+        match op_order {
+            CiphertextOpOrder::KeyswitchPBS => {
+                let ct = unsafe { std::mem::transmute(ct) };
+                // This updates the ciphertext degree
+                self.keyswitch_programmable_bootstrap_assign(server_key, ct, acc)?;
+            }
+            CiphertextOpOrder::PBSKeyswitch => {
+                let ct = unsafe { std::mem::transmute(ct) };
+                // This updates the ciphertext degree
+                self.programmable_bootstrap_keyswitch_assign(server_key, ct, acc)?;
+            }
+        };
+
+        Ok(())
+    }
+
+    pub(crate) fn apply_lookup_table<const OP_ORDER: u8>(
+        &mut self,
+        server_key: &ServerKey,
+        ct: &CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
+    ) -> EngineResult<CiphertextNew<OP_ORDER>> {
+        let mut ct_res = ct.clone();
+
+        self.apply_lookup_table_assign(server_key, &mut ct_res, acc)?;
+
+        Ok(ct_res)
+    }
+
+    pub(crate) fn apply_msg_identity_lut_assign<const OP_ORDER: u8>(
+        &mut self,
+        server_key: &ServerKey,
+        ct: &mut CiphertextNew<OP_ORDER>,
+    ) -> EngineResult<()> {
+        let op_order: CiphertextOpOrder = OP_ORDER.try_into().unwrap();
+
+        // We know the OP_ORDER corresponds to the CiphertextBig or CiphertextSmall and the memory
+        // layout is the same as the type information is just encoded in a const generics
+        match op_order {
+            CiphertextOpOrder::KeyswitchPBS => {
+                let ct = unsafe { std::mem::transmute(ct) };
+                // This updates the ciphertext degree
+                self.keyswitch_bootstrap_assign(server_key, ct)?;
+            }
+            CiphertextOpOrder::PBSKeyswitch => {
+                let ct = unsafe { std::mem::transmute(ct) };
+                // This updates the ciphertext degree
+                self.bootstrap_keyswitch_assign(server_key, ct)?;
+            }
+        };
+
         Ok(())
     }
 
     pub(crate) fn carry_extract_assign(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextBig,
     ) -> EngineResult<()> {
         let modulus = ct.message_modulus.0 as u64;
 
@@ -431,48 +590,55 @@ impl ShortintEngine {
     pub(crate) fn carry_extract(
         &mut self,
         server_key: &ServerKey,
-        ct: &Ciphertext,
-    ) -> EngineResult<Ciphertext> {
+        ct: &CiphertextBig,
+    ) -> EngineResult<CiphertextBig> {
         let mut result = ct.clone();
         self.carry_extract_assign(server_key, &mut result)?;
         Ok(result)
     }
 
-    pub(crate) fn message_extract_assign(
+    pub(crate) fn message_extract_assign<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextNew<OP_ORDER>,
     ) -> EngineResult<()> {
         let modulus = ct.message_modulus.0 as u64;
 
         let acc = self.generate_accumulator(server_key, |x| x % modulus)?;
 
-        self.keyswitch_programmable_bootstrap_assign(server_key, ct, &acc)?;
+        self.apply_lookup_table_assign(server_key, ct, &acc)?;
 
-        ct.degree = Degree(ct.message_modulus.0 - 1);
         Ok(())
     }
 
     pub(crate) fn message_extract(
         &mut self,
         server_key: &ServerKey,
-        ct: &Ciphertext,
-    ) -> EngineResult<Ciphertext> {
+        ct: &CiphertextBig,
+    ) -> EngineResult<CiphertextBig> {
         let mut result = ct.clone();
         self.message_extract_assign(server_key, &mut result)?;
         Ok(result)
     }
 
     // Impossible to call the assign function in this case
-    pub(crate) fn create_trivial(
+    pub(crate) fn create_trivial<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
         value: u64,
-    ) -> EngineResult<Ciphertext> {
-        let lwe_size = server_key
-            .bootstrapping_key
-            .output_lwe_dimension()
-            .to_lwe_size();
+    ) -> EngineResult<CiphertextNew<OP_ORDER>> {
+        let op_order: CiphertextOpOrder = OP_ORDER.try_into().unwrap();
+
+        let lwe_size = match op_order {
+            CiphertextOpOrder::KeyswitchPBS => server_key
+                .bootstrapping_key
+                .output_lwe_dimension()
+                .to_lwe_size(),
+            CiphertextOpOrder::PBSKeyswitch => server_key
+                .bootstrapping_key
+                .input_lwe_dimension()
+                .to_lwe_size(),
+        };
 
         let modular_value = value as usize % server_key.message_modulus.0;
 
@@ -487,7 +653,7 @@ impl ShortintEngine {
 
         let degree = Degree(modular_value);
 
-        Ok(Ciphertext {
+        Ok(CiphertextNew {
             ct,
             degree,
             message_modulus: server_key.message_modulus,
@@ -498,7 +664,7 @@ impl ShortintEngine {
     pub(crate) fn create_trivial_assign(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextBig,
         value: u64,
     ) -> EngineResult<()> {
         let modular_value = value as usize % server_key.message_modulus.0;

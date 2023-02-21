@@ -1,15 +1,17 @@
 use crate::c_api::utils::*;
 use std::os::raw::c_int;
 
-use super::{ShortintCiphertext, ShortintServerKey};
+use super::{ShortintCiphertext, ShortintCiphertextInner, ShortintServerKey};
 
 // This is the accepted way to declare a pointer to a C function/callback in cbindgen
 pub type AccumulatorCallback = Option<extern "C" fn(u64) -> u64>;
 pub type BivariateAccumulatorCallback = Option<extern "C" fn(u64, u64) -> u64>;
 
-pub struct ShortintPBSAccumulator(pub(in crate::c_api) crate::shortint::server_key::Accumulator);
+pub struct ShortintPBSAccumulator(
+    pub(in crate::c_api) crate::shortint::server_key::AccumulatorOwned,
+);
 pub struct ShortintBivariatePBSAccumulator(
-    pub(in crate::c_api) crate::shortint::server_key::Accumulator,
+    pub(in crate::c_api) crate::shortint::server_key::AccumulatorOwned,
 );
 
 #[no_mangle]
@@ -59,11 +61,16 @@ pub unsafe extern "C" fn shortint_server_key_programmable_bootstrap(
         let accumulator = get_ref_checked(accumulator).unwrap();
         let ct_in = get_ref_checked(ct_in).unwrap();
 
-        let heap_allocated_result = Box::new(ShortintCiphertext(
-            server_key
-                .0
-                .keyswitch_programmable_bootstrap(&ct_in.0, &accumulator.0),
-        ));
+        let res = match &ct_in.0 {
+            ShortintCiphertextInner::Big(inner) => {
+                ShortintCiphertextInner::Big(server_key.0.apply_lookup_table(inner, &accumulator.0))
+            }
+            ShortintCiphertextInner::Small(inner) => ShortintCiphertextInner::Small(
+                server_key.0.apply_lookup_table(inner, &accumulator.0),
+            ),
+        };
+
+        let heap_allocated_result = Box::new(ShortintCiphertext(res));
 
         *result = Box::into_raw(heap_allocated_result);
     })
@@ -80,9 +87,15 @@ pub unsafe extern "C" fn shortint_server_key_programmable_bootstrap_assign(
         let accumulator = get_ref_checked(accumulator).unwrap();
         let ct_in_and_result = get_mut_checked(ct_in_and_result).unwrap();
 
-        server_key
-            .0
-            .keyswitch_programmable_bootstrap_assign(&mut ct_in_and_result.0, &accumulator.0);
+        match &mut ct_in_and_result.0 {
+            ShortintCiphertextInner::Big(inner) => server_key
+                .0
+                .apply_lookup_table_assign(inner, &accumulator.0),
+
+            ShortintCiphertextInner::Small(inner) => server_key
+                .0
+                .apply_lookup_table_assign(inner, &accumulator.0),
+        };
     })
 }
 
@@ -135,13 +148,35 @@ pub unsafe extern "C" fn shortint_server_key_bivariate_programmable_bootstrap(
         let ct_left = get_ref_checked(ct_left).unwrap();
         let ct_right = get_mut_checked(ct_right).unwrap();
 
-        let heap_allocated_result = Box::new(ShortintCiphertext(
-            crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
-                engine
-                    .smart_bivariate_pbs(&server_key.0, &ct_left.0, &mut ct_right.0, &accumulator.0)
-                    .unwrap()
-            }),
-        ));
+        let res = match (&ct_left.0, &mut ct_right.0) {
+            (
+                ShortintCiphertextInner::Big(inner_left),
+                ShortintCiphertextInner::Big(inner_right),
+            ) => ShortintCiphertextInner::Big(
+                crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
+                    engine
+                        .smart_bivariate_pbs(&server_key.0, inner_left, inner_right, &accumulator.0)
+                        .unwrap()
+                }),
+            ),
+            (
+                ShortintCiphertextInner::Small(inner_left),
+                ShortintCiphertextInner::Small(inner_right),
+            ) => ShortintCiphertextInner::Small(
+                crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
+                    engine
+                        .smart_bivariate_pbs(&server_key.0, inner_left, inner_right, &accumulator.0)
+                        .unwrap()
+                }),
+            ),
+            _ => Err(
+                "Got mixed Big and Small ciphertexts, this is not supported, \
+            did you mistakenly use a Small ciphertext with a Big ciphertext?",
+            )
+            .unwrap(),
+        };
+
+        let heap_allocated_result = Box::new(ShortintCiphertext(res));
 
         *result = Box::into_raw(heap_allocated_result);
     })
@@ -160,15 +195,38 @@ pub unsafe extern "C" fn shortint_server_key_bivariate_programmable_bootstrap_as
         let ct_left_and_result = get_mut_checked(ct_left_and_result).unwrap();
         let ct_right = get_mut_checked(ct_right).unwrap();
 
-        crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
-            engine
-                .smart_bivariate_pbs_assign(
-                    &server_key.0,
-                    &mut ct_left_and_result.0,
-                    &mut ct_right.0,
-                    &accumulator.0,
-                )
-                .unwrap()
-        });
+        match (&mut ct_left_and_result.0, &mut ct_right.0) {
+            (
+                ShortintCiphertextInner::Big(inner_left),
+                ShortintCiphertextInner::Big(inner_right),
+            ) => crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
+                engine
+                    .smart_bivariate_pbs_assign(
+                        &server_key.0,
+                        inner_left,
+                        inner_right,
+                        &accumulator.0,
+                    )
+                    .unwrap()
+            }),
+            (
+                ShortintCiphertextInner::Small(inner_left),
+                ShortintCiphertextInner::Small(inner_right),
+            ) => crate::shortint::engine::ShortintEngine::with_thread_local_mut(|engine| {
+                engine
+                    .smart_bivariate_pbs_assign(
+                        &server_key.0,
+                        inner_left,
+                        inner_right,
+                        &accumulator.0,
+                    )
+                    .unwrap()
+            }),
+            _ => Err(
+                "Got mixed Big and Small ciphertexts, this is not supported, \
+            did you mistakenly use a Small ciphertext with a Big ciphertext?",
+            )
+            .unwrap(),
+        };
     })
 }

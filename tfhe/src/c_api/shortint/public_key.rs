@@ -49,8 +49,9 @@ pub unsafe extern "C" fn shortint_public_key_encrypt(
 
         let public_key = get_ref_checked(public_key).unwrap();
 
-        let heap_allocated_ciphertext =
-            Box::new(ShortintCiphertext(public_key.0.encrypt(value_to_encrypt)));
+        let heap_allocated_ciphertext = Box::new(ShortintCiphertext(
+            public_key.0.encrypt(value_to_encrypt).into(),
+        ));
 
         *result = Box::into_raw(heap_allocated_ciphertext);
     })
@@ -131,7 +132,7 @@ pub unsafe extern "C" fn shortint_compressed_public_key_encrypt(
         let compressed_public_key = get_ref_checked(compressed_public_key).unwrap();
 
         let heap_allocated_ciphertext = Box::new(ShortintCiphertext(
-            compressed_public_key.0.encrypt(value_to_encrypt),
+            compressed_public_key.0.encrypt(value_to_encrypt).into(),
         ));
 
         *result = Box::into_raw(heap_allocated_ciphertext);

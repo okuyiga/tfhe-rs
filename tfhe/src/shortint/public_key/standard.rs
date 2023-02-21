@@ -1,6 +1,6 @@
 //! Module with the definition of the PublicKey.
 use crate::core_crypto::entities::*;
-use crate::shortint::ciphertext::Ciphertext;
+use crate::shortint::ciphertext::CiphertextBig;
 use crate::shortint::engine::ShortintEngine;
 use crate::shortint::parameters::{MessageModulus, Parameters};
 use crate::shortint::{ClientKey, CompressedPublicKey};
@@ -63,7 +63,7 @@ impl PublicKey {
     /// let modulus = cks.parameters.message_modulus.0 as u64;
     /// assert_eq!(msg % modulus, dec);
     /// ```
-    pub fn encrypt(&self, message: u64) -> Ciphertext {
+    pub fn encrypt(&self, message: u64) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.encrypt_with_public_key(self, message).unwrap()
         })
@@ -95,7 +95,7 @@ impl PublicKey {
         &self,
         message: u64,
         message_modulus: MessageModulus,
-    ) -> Ciphertext {
+    ) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .encrypt_with_message_modulus_and_public_key(self, message, message_modulus)
@@ -125,7 +125,7 @@ impl PublicKey {
     /// let dec = cks.decrypt_message_and_carry(&ct);
     /// assert_eq!(msg, dec);
     /// ```
-    pub fn unchecked_encrypt(&self, message: u64) -> Ciphertext {
+    pub fn unchecked_encrypt(&self, message: u64) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .unchecked_encrypt_with_public_key(self, message)
@@ -155,7 +155,7 @@ impl PublicKey {
     /// let dec = cks.decrypt_message_and_carry_without_padding(&ct);
     /// assert_eq!(msg, dec);
     /// ```
-    pub fn encrypt_without_padding(&self, message: u64) -> Ciphertext {
+    pub fn encrypt_without_padding(&self, message: u64) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .encrypt_without_padding_with_public_key(self, message)
@@ -187,7 +187,7 @@ impl PublicKey {
     /// let dec = cks.decrypt_message_native_crt(&ct, modulus);
     /// assert_eq!(msg, dec % modulus as u64);
     /// ```
-    pub fn encrypt_native_crt(&self, message: u64, message_modulus: u8) -> Ciphertext {
+    pub fn encrypt_native_crt(&self, message: u64, message_modulus: u8) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .encrypt_native_crt_with_public_key(self, message, message_modulus)

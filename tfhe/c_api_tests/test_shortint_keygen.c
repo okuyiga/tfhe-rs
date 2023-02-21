@@ -88,7 +88,7 @@ void test_server_key_trivial_encrypt(void) {
   int gen_keys_ok = shortint_gen_keys_with_parameters(params, &cks, &sks);
   assert(gen_keys_ok == 0);
 
-  int encrypt_ok = shortint_server_key_create_trivial(sks, 3, &ct);
+  int encrypt_ok = shortint_server_key_create_trivial(sks, 3, ShortintCiphertextBig, &ct);
   assert(encrypt_ok == 0);
 
   uint64_t result = -1;

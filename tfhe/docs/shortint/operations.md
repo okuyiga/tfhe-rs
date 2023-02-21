@@ -307,7 +307,7 @@ fn main() {
     let acc = server_key.generate_accumulator(|n| n.count_ones().into());
 
     // add the two ciphertexts
-    let ct_res = server_key.keyswitch_programmable_bootstrap(&ct_1, &acc);
+    let ct_res = server_key.apply_lookup_table(&ct_1, &acc);
 
 
     // We use the client key to decrypt the output of the circuit:

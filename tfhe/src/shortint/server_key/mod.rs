@@ -21,9 +21,10 @@ pub use compressed::CompressedServerKey;
 mod tests;
 
 use crate::core_crypto::algorithms::*;
+use crate::core_crypto::commons::traits::*;
 use crate::core_crypto::entities::*;
 use crate::core_crypto::fft_impl::crypto::bootstrap::FourierLweBootstrapKeyOwned;
-use crate::shortint::ciphertext::{Ciphertext, Degree};
+use crate::shortint::ciphertext::{CiphertextBig, CiphertextNew, CiphertextSmall, Degree};
 use crate::shortint::client_key::ClientKey;
 use crate::shortint::engine::ShortintEngine;
 use crate::shortint::parameters::{CarryModulus, MessageModulus};
@@ -68,10 +69,16 @@ pub struct ServerKey {
     pub max_degree: MaxDegree,
 }
 
-pub struct Accumulator {
-    pub acc: GlweCiphertextOwned<u64>,
+#[derive(Clone, Debug, PartialEq)]
+#[must_use]
+pub struct Accumulator<C: Container<Element = u64>> {
+    pub acc: GlweCiphertext<C>,
     pub degree: Degree,
 }
+
+pub type AccumulatorOwned = Accumulator<Vec<u64>>;
+pub type AccumulatorMutView<'a> = Accumulator<&'a mut [u64]>;
+pub type AccumulatorView<'a> = Accumulator<&'a [u64]>;
 
 impl ServerKey {
     /// Generate a server key.
@@ -120,13 +127,13 @@ impl ServerKey {
     /// let f = |x| x ^ 2 % 4;
     ///
     /// let acc = sks.generate_accumulator(f);
-    /// let ct_res = sks.keyswitch_programmable_bootstrap(&ct, &acc);
+    /// let ct_res = sks.apply_lookup_table(&ct, &acc);
     ///
     /// let dec = cks.decrypt(&ct_res);
     /// // 3^2 mod 4 = 1
     /// assert_eq!(dec, f(msg));
     /// ```
-    pub fn generate_accumulator<F>(&self, f: F) -> Accumulator
+    pub fn generate_accumulator<F>(&self, f: F) -> AccumulatorOwned
     where
         F: Fn(u64) -> u64,
     {
@@ -160,7 +167,7 @@ impl ServerKey {
     /// // 3^2 mod 4 = 1
     /// assert_eq!(dec, f(msg, 0));
     /// ```
-    pub fn generate_accumulator_bivariate<F>(&self, f: F) -> Accumulator
+    pub fn generate_accumulator_bivariate<F>(&self, f: F) -> AccumulatorOwned
     where
         F: Fn(u64, u64) -> u64,
     {
@@ -213,13 +220,13 @@ impl ServerKey {
     ///
     /// assert_eq!(clear, (3 + 2) % 4);
     /// ```
-    pub fn keyswitch_bootstrap(&self, ct_in: &Ciphertext) -> Ciphertext {
+    pub fn keyswitch_bootstrap(&self, ct_in: &CiphertextBig) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.keyswitch_bootstrap(self, ct_in).unwrap()
         })
     }
 
-    pub fn keyswitch_bootstrap_assign(&self, ct_in: &mut Ciphertext) {
+    pub fn keyswitch_bootstrap_assign(&self, ct_in: &mut CiphertextBig) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.keyswitch_bootstrap_assign(self, ct_in).unwrap()
         })
@@ -251,10 +258,10 @@ impl ServerKey {
     /// ```
     pub fn keyswitch_programmable_bootstrap_bivariate(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-        acc: &Accumulator,
-    ) -> Ciphertext {
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
+        acc: &AccumulatorOwned,
+    ) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .keyswitch_programmable_bootstrap_bivariate(self, ct_left, ct_right, acc)
@@ -264,9 +271,9 @@ impl ServerKey {
 
     pub fn keyswitch_programmable_bootstrap_bivariate_assign(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
-        acc: &Accumulator,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
+        acc: &AccumulatorOwned,
     ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
@@ -292,33 +299,29 @@ impl ServerKey {
     ///
     /// // Generate the accumulator for the function f: x -> x^3 mod 2^2
     /// let acc = sks.generate_accumulator(|x| x * x * x % modulus);
-    /// let ct_res = sks.keyswitch_programmable_bootstrap(&ct, &acc);
+    /// let ct_res = sks.apply_lookup_table(&ct, &acc);
     ///
     /// let dec = cks.decrypt(&ct_res);
     /// // 3^3 mod 4 = 3
     /// assert_eq!(dec, (msg * msg * msg) % modulus);
     /// ```
-    pub fn keyswitch_programmable_bootstrap(
+    pub fn apply_lookup_table<const OP_ORDER: u8>(
         &self,
-        ct_in: &Ciphertext,
-        acc: &Accumulator,
-    ) -> Ciphertext {
+        ct_in: &CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
-            engine
-                .keyswitch_programmable_bootstrap(self, ct_in, acc)
-                .unwrap()
+            engine.apply_lookup_table(self, ct_in, acc).unwrap()
         })
     }
 
-    pub fn keyswitch_programmable_bootstrap_assign(
+    pub fn apply_lookup_table_assign<const OP_ORDER: u8>(
         &self,
-        ct_in: &mut Ciphertext,
-        acc: &Accumulator,
+        ct_in: &mut CiphertextNew<OP_ORDER>,
+        acc: &AccumulatorOwned,
     ) {
         ShortintEngine::with_thread_local_mut(|engine| {
-            engine
-                .keyswitch_programmable_bootstrap_assign(self, ct_in, acc)
-                .unwrap()
+            engine.apply_lookup_table_assign(self, ct_in, acc).unwrap()
         })
     }
 
@@ -327,10 +330,10 @@ impl ServerKey {
     /// This is used to apply many binary operations (comparisons, multiplications, division).
     pub fn unchecked_functional_bivariate_pbs<F>(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
         f: F,
-    ) -> Ciphertext
+    ) -> CiphertextBig
     where
         F: Fn(u64) -> u64,
     {
@@ -343,8 +346,8 @@ impl ServerKey {
 
     pub fn unchecked_functional_bivariate_pbs_assign<F>(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
         f: F,
     ) where
         F: Fn(u64) -> u64,
@@ -357,7 +360,11 @@ impl ServerKey {
     }
 
     /// Verify if a bivariate functional pbs can be applied on ct_left and ct_right.
-    pub fn is_functional_bivariate_pbs_possible(&self, ct1: &Ciphertext, ct2: &Ciphertext) -> bool {
+    pub fn is_functional_bivariate_pbs_possible<const OP_ORDER: u8>(
+        &self,
+        ct1: &CiphertextNew<OP_ORDER>,
+        ct2: &CiphertextNew<OP_ORDER>,
+    ) -> bool {
         //product of the degree
         let final_degree = ct1.degree.0 * (ct2.degree.0 + 1) + ct2.degree.0;
         final_degree < ct1.carry_modulus.0 * ct1.message_modulus.0
@@ -396,7 +403,7 @@ impl ServerKey {
     /// let res = cks.decrypt_message_and_carry(&ct);
     /// assert_eq!(2, res);
     /// ```
-    pub fn carry_extract_assign(&self, ct: &mut Ciphertext) {
+    pub fn carry_extract_assign(&self, ct: &mut CiphertextBig) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.carry_extract_assign(self, ct).unwrap()
         })
@@ -435,7 +442,7 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(2, res);
     /// ```
-    pub fn carry_extract(&self, ct: &Ciphertext) -> Ciphertext {
+    pub fn carry_extract(&self, ct: &CiphertextBig) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| engine.carry_extract(self, ct).unwrap())
     }
 
@@ -472,7 +479,7 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct);
     /// assert_eq!(1, res);
     /// ```
-    pub fn message_extract_assign(&self, ct: &mut Ciphertext) {
+    pub fn message_extract_assign(&self, ct: &mut CiphertextBig) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.message_extract_assign(self, ct).unwrap()
         })
@@ -511,11 +518,12 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(1, res);
     /// ```
-    pub fn message_extract(&self, ct: &Ciphertext) -> Ciphertext {
+    pub fn message_extract(&self, ct: &CiphertextBig) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| engine.message_extract(self, ct).unwrap())
     }
 
-    /// Compute a trivial shortint from a given value.
+    /// Compute a trivial shortint ciphertext with the dimension of the big LWE secret key from a
+    /// given value.
     ///
     /// # Example
     ///
@@ -534,11 +542,35 @@ impl ServerKey {
     /// let ct_res = cks.decrypt(&ct1);
     /// assert_eq!(1, ct_res);
     /// ```
-    pub fn create_trivial(&self, value: u64) -> Ciphertext {
+    pub fn create_trivial(&self, value: u64) -> CiphertextBig {
         ShortintEngine::with_thread_local_mut(|engine| engine.create_trivial(self, value).unwrap())
     }
 
-    pub fn create_trivial_assign(&self, ct: &mut Ciphertext, value: u64) {
+    /// Compute a trivial shortint ciphertext with the dimension of the small LWE secret key from a
+    /// given value.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tfhe::shortint::gen_keys;
+    /// use tfhe::shortint::parameters::PARAM_MESSAGE_2_CARRY_2;
+    ///
+    /// // Generate the client key and the server key:
+    /// let (cks, sks) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
+    ///
+    /// let msg = 1;
+    ///
+    /// // Trivial encryption
+    /// let ct1 = sks.create_trivial_small(msg);
+    ///
+    /// let ct_res = cks.decrypt(&ct1);
+    /// assert_eq!(1, ct_res);
+    /// ```
+    pub fn create_trivial_small(&self, value: u64) -> CiphertextSmall {
+        ShortintEngine::with_thread_local_mut(|engine| engine.create_trivial(self, value).unwrap())
+    }
+
+    pub fn create_trivial_assign(&self, ct: &mut CiphertextBig, value: u64) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.create_trivial_assign(self, ct, value).unwrap()
         })

@@ -2,22 +2,22 @@ use crate::core_crypto::algorithms::*;
 use crate::core_crypto::entities::*;
 use crate::shortint::ciphertext::Degree;
 use crate::shortint::engine::{EngineResult, ShortintEngine};
-use crate::shortint::{Ciphertext, ServerKey};
+use crate::shortint::{CiphertextNew, ServerKey};
 
 impl ShortintEngine {
-    pub(crate) fn unchecked_scalar_add(
+    pub(crate) fn unchecked_scalar_add<const OP_ORDER: u8>(
         &mut self,
-        ct: &Ciphertext,
+        ct: &CiphertextNew<OP_ORDER>,
         scalar: u8,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextNew<OP_ORDER>> {
         let mut ct_result = ct.clone();
         self.unchecked_scalar_add_assign(&mut ct_result, scalar)?;
         Ok(ct_result)
     }
 
-    pub(crate) fn unchecked_scalar_add_assign(
+    pub(crate) fn unchecked_scalar_add_assign<const OP_ORDER: u8>(
         &mut self,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextNew<OP_ORDER>,
         scalar: u8,
     ) -> EngineResult<()> {
         let delta = (1_u64 << 63) / (ct.message_modulus.0 * ct.carry_modulus.0) as u64;
@@ -29,10 +29,10 @@ impl ShortintEngine {
         Ok(())
     }
 
-    pub(crate) fn unchecked_scalar_add_assign_crt(
+    pub(crate) fn unchecked_scalar_add_assign_crt<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextNew<OP_ORDER>,
         scalar: u8,
     ) -> EngineResult<()> {
         let delta =
@@ -45,22 +45,22 @@ impl ShortintEngine {
         Ok(())
     }
 
-    pub(crate) fn smart_scalar_add(
+    pub(crate) fn smart_scalar_add<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextNew<OP_ORDER>,
         scalar: u8,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextNew<OP_ORDER>> {
         let mut ct_result = ct.clone();
         self.smart_scalar_add_assign(server_key, &mut ct_result, scalar)?;
 
         Ok(ct_result)
     }
 
-    pub(crate) fn smart_scalar_add_assign(
+    pub(crate) fn smart_scalar_add_assign<const OP_ORDER: u8>(
         &mut self,
         server_key: &ServerKey,
-        ct: &mut Ciphertext,
+        ct: &mut CiphertextNew<OP_ORDER>,
         scalar: u8,
     ) -> EngineResult<()> {
         let modulus = server_key.message_modulus.0 as u64;
@@ -70,7 +70,7 @@ impl ShortintEngine {
         } else {
             // If the scalar is too large, PBS is used to compute the scalar mul
             let acc = self.generate_accumulator(server_key, |x| (scalar as u64 + x) % modulus)?;
-            self.keyswitch_programmable_bootstrap_assign(server_key, ct, &acc)?;
+            self.apply_lookup_table_assign(server_key, ct, &acc)?;
             ct.degree = Degree(server_key.message_modulus.0 - 1);
         }
         Ok(())

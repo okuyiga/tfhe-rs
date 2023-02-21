@@ -5,7 +5,7 @@ use crate::core_crypto::commons::parameters::*;
 use crate::core_crypto::entities::*;
 use crate::shortint::ciphertext::Degree;
 use crate::shortint::parameters::{CarryModulus, MessageModulus};
-use crate::shortint::{Ciphertext, ClientKey, CompressedPublicKey, Parameters, PublicKey};
+use crate::shortint::{CiphertextBig, ClientKey, CompressedPublicKey, Parameters, PublicKey};
 
 // We have q = 2^64 so log2q = 64
 const LOG2_Q_64: usize = 64;
@@ -27,7 +27,7 @@ impl ShortintEngine {
 
         #[cfg(not(feature = "__wasm_api"))]
         let lwe_public_key = par_allocate_and_generate_new_lwe_public_key(
-            &client_key.lwe_secret_key,
+            &client_key.large_lwe_secret_key,
             zero_encryption_count,
             client_key.parameters.glwe_modular_std_dev,
             &mut self.encryption_generator,
@@ -35,7 +35,7 @@ impl ShortintEngine {
 
         #[cfg(feature = "__wasm_api")]
         let lwe_public_key = allocate_and_generate_new_lwe_public_key(
-            &client_key.lwe_secret_key,
+            &client_key.large_lwe_secret_key,
             zero_encryption_count,
             client_key.parameters.glwe_modular_std_dev,
             &mut self.encryption_generator,
@@ -57,7 +57,7 @@ impl ShortintEngine {
 
         #[cfg(not(feature = "__wasm_api"))]
         let compressed_public_key = par_allocate_and_generate_new_seeded_lwe_public_key(
-            &client_key.lwe_secret_key,
+            &client_key.large_lwe_secret_key,
             zero_encryption_count,
             client_parameters.glwe_modular_std_dev,
             &mut self.seeder,
@@ -65,7 +65,7 @@ impl ShortintEngine {
 
         #[cfg(feature = "__wasm_api")]
         let compressed_public_key = allocate_and_generate_new_seeded_lwe_public_key(
-            &client_key.lwe_secret_key,
+            &client_key.large_lwe_secret_key,
             zero_encryption_count,
             client_parameters.glwe_modular_std_dev,
             &mut self.seeder,
@@ -81,7 +81,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &PublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let ciphertext = self.encrypt_with_message_modulus_and_public_key(
             public_key,
             message,
@@ -95,7 +95,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &CompressedPublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let ciphertext = self.encrypt_with_message_modulus_and_compressed_public_key(
             public_key,
             message,
@@ -110,7 +110,7 @@ impl ShortintEngine {
         public_key: &PublicKey,
         message: u64,
         message_modulus: MessageModulus,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         //This ensures that the space message_modulus*carry_modulus < param.message_modulus *
         // param.carry_modulus
         let carry_modulus = (public_key.parameters.message_modulus.0
@@ -139,7 +139,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(message_modulus.0 - 1),
             message_modulus,
@@ -152,7 +152,7 @@ impl ShortintEngine {
         public_key: &CompressedPublicKey,
         message: u64,
         message_modulus: MessageModulus,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         //This ensures that the space message_modulus*carry_modulus < param.message_modulus *
         // param.carry_modulus
         let carry_modulus = (public_key.parameters.message_modulus.0
@@ -182,7 +182,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(message_modulus.0 - 1),
             message_modulus,
@@ -194,7 +194,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &PublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         //Multiply by 2 to reshift and exclude the padding bit
         let delta = ((1_u64 << 63)
             / (public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0)
@@ -216,7 +216,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(public_key.parameters.message_modulus.0 - 1),
             message_modulus: public_key.parameters.message_modulus,
@@ -228,7 +228,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &CompressedPublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         //Multiply by 2 to reshift and exclude the padding bit
         let delta = ((1_u64 << 63)
             / (public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0)
@@ -250,7 +250,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(public_key.parameters.message_modulus.0 - 1),
             message_modulus: public_key.parameters.message_modulus,
@@ -263,7 +263,7 @@ impl ShortintEngine {
         public_key: &PublicKey,
         message: u64,
         message_modulus: u8,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let carry_modulus = 1;
         let m = (message % message_modulus as u64) as u128;
         let shifted_message = m * (1 << 64) / message_modulus as u128;
@@ -281,7 +281,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(message_modulus as usize - 1),
             message_modulus: MessageModulus(message_modulus as usize),
@@ -294,7 +294,7 @@ impl ShortintEngine {
         public_key: &CompressedPublicKey,
         message: u64,
         message_modulus: u8,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let carry_modulus = 1;
         let m = (message % message_modulus as u64) as u128;
         let shifted_message = m * (1 << 64) / message_modulus as u128;
@@ -312,7 +312,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(message_modulus as usize - 1),
             message_modulus: MessageModulus(message_modulus as usize),
@@ -324,7 +324,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &PublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let delta = (1_u64 << 63)
             / (public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0)
                 as u64;
@@ -342,7 +342,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(
                 public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0 - 1,
@@ -356,7 +356,7 @@ impl ShortintEngine {
         &mut self,
         public_key: &CompressedPublicKey,
         message: u64,
-    ) -> EngineResult<Ciphertext> {
+    ) -> EngineResult<CiphertextBig> {
         let delta = (1_u64 << 63)
             / (public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0)
                 as u64;
@@ -374,7 +374,7 @@ impl ShortintEngine {
             &mut self.secret_generator,
         );
 
-        Ok(Ciphertext {
+        Ok(CiphertextBig {
             ct: encrypted_ct,
             degree: Degree(
                 public_key.parameters.message_modulus.0 * public_key.parameters.carry_modulus.0 - 1,

@@ -1,7 +1,7 @@
 use super::ServerKey;
 use crate::shortint::engine::ShortintEngine;
 use crate::shortint::CheckError::CarryFull;
-use crate::shortint::{CheckError, Ciphertext};
+use crate::shortint::{CheckError, CiphertextBig, CiphertextNew};
 
 impl ServerKey {
     /// Compute bitwise AND between two ciphertexts without checks.
@@ -26,8 +26,20 @@ impl ServerKey {
     ///
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(clear_1 & clear_2, res);
+    ///
+    /// let ct_1 = cks.encrypt_small(clear_1);
+    /// let ct_2 = cks.encrypt_small(clear_2);
+    ///
+    /// let ct_res = sks.unchecked_bitand(&ct_1, &ct_2);
+    ///
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(clear_1 & clear_2, res);
     /// ```
-    pub fn unchecked_bitand(&self, ct_left: &Ciphertext, ct_right: &Ciphertext) -> Ciphertext {
+    pub fn unchecked_bitand<const OP_ORDER: u8>(
+        &self,
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.unchecked_bitand(self, ct_left, ct_right).unwrap()
         })
@@ -55,8 +67,20 @@ impl ServerKey {
     ///
     /// let res = cks.decrypt(&ct_left);
     /// assert_eq!(clear_1 & clear_2, res);
+    ///
+    /// let mut ct_left = cks.encrypt_small(clear_1);
+    /// let ct_right = cks.encrypt_small(clear_2);
+    ///
+    /// sks.unchecked_bitand_assign(&mut ct_left, &ct_right);
+    ///
+    /// let res = cks.decrypt(&ct_left);
+    /// assert_eq!(clear_1 & clear_2, res);
     /// ```
-    pub fn unchecked_bitand_assign(&self, ct_left: &mut Ciphertext, ct_right: &Ciphertext) {
+    pub fn unchecked_bitand_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .unchecked_bitand_assign(self, ct_left, ct_right)
@@ -95,9 +119,9 @@ impl ServerKey {
     /// ```
     pub fn checked_bitand(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-    ) -> Result<Ciphertext, CheckError> {
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
+    ) -> Result<CiphertextBig, CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             let ct_result = self.unchecked_bitand(ct_left, ct_right);
             Ok(ct_result)
@@ -136,8 +160,8 @@ impl ServerKey {
     /// ```
     pub fn checked_bitand_assign(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
     ) -> Result<(), CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             self.unchecked_bitand_assign(ct_left, ct_right);
@@ -172,8 +196,23 @@ impl ServerKey {
     /// // Decrypt:
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(msg & msg, res);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.encrypt_small(msg);
+    /// let mut ct2 = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an AND:
+    /// let ct_res = sks.smart_bitand(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(msg & msg, res);
     /// ```
-    pub fn smart_bitand(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) -> Ciphertext {
+    pub fn smart_bitand<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitand(self, ct_left, ct_right).unwrap()
         })
@@ -196,10 +235,11 @@ impl ServerKey {
     /// let (cks, sks) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
     ///
     /// let modulus = 4;
-    /// // Encrypt two messages:
+    ///
     /// let msg1 = 15;
     /// let msg2 = 3;
     ///
+    /// // Encrypt two messages:
     /// let mut ct1 = cks.unchecked_encrypt(msg1);
     /// let mut ct2 = cks.encrypt(msg2);
     ///
@@ -210,8 +250,23 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct1);
     ///
     /// assert_eq!((msg2 & msg1) % modulus, res);
+    ///
+    /// let mut ct1 = cks.unchecked_encrypt_small(msg1);
+    /// let mut ct2 = cks.encrypt_small(msg2);
+    ///
+    /// // Compute homomorphically an AND:
+    /// sks.smart_bitand_assign(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct1);
+    ///
+    /// assert_eq!((msg2 & msg1) % modulus, res);
     /// ```
-    pub fn smart_bitand_assign(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) {
+    pub fn smart_bitand_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitand_assign(self, ct_left, ct_right).unwrap()
         })
@@ -240,8 +295,21 @@ impl ServerKey {
     ///
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(clear_1 ^ clear_2, res);
+    ///
+    /// // Encrypt two messages
+    /// let ct_left = cks.encrypt_small(clear_1);
+    /// let ct_right = cks.encrypt_small(clear_2);
+    ///
+    /// let ct_res = sks.unchecked_bitxor(&ct_left, &ct_right);
+    ///
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(clear_1 ^ clear_2, res);
     /// ```
-    pub fn unchecked_bitxor(&self, ct_left: &Ciphertext, ct_right: &Ciphertext) -> Ciphertext {
+    pub fn unchecked_bitxor<const OP_ORDER: u8>(
+        &self,
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.unchecked_bitxor(self, ct_left, ct_right).unwrap()
         })
@@ -264,14 +332,27 @@ impl ServerKey {
     ///
     /// // Encrypt two messages
     /// let mut ct_left = cks.encrypt(clear_1);
-    /// let mut ct_right = cks.encrypt(clear_2);
+    /// let ct_right = cks.encrypt(clear_2);
     ///
-    /// sks.smart_bitxor(&mut ct_left, &mut ct_right);
+    /// sks.unchecked_bitxor_assign(&mut ct_left, &ct_right);
+    ///
+    /// let res = cks.decrypt(&ct_left);
+    /// assert_eq!(clear_1 ^ clear_2, res);
+    ///
+    /// // Encrypt two messages
+    /// let mut ct_left = cks.encrypt_small(clear_1);
+    /// let ct_right = cks.encrypt_small(clear_2);
+    ///
+    /// sks.unchecked_bitxor_assign(&mut ct_left, &ct_right);
     ///
     /// let res = cks.decrypt(&ct_left);
     /// assert_eq!(clear_1 ^ clear_2, res);
     /// ```
-    pub fn unchecked_bitxor_assign(&self, ct_left: &mut Ciphertext, ct_right: &Ciphertext) {
+    pub fn unchecked_bitxor_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .unchecked_bitxor_assign(self, ct_left, ct_right)
@@ -310,9 +391,9 @@ impl ServerKey {
     /// ```
     pub fn checked_bitxor(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-    ) -> Result<Ciphertext, CheckError> {
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
+    ) -> Result<CiphertextBig, CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             let ct_result = self.unchecked_bitxor(ct_left, ct_right);
             Ok(ct_result)
@@ -351,8 +432,8 @@ impl ServerKey {
     /// ```
     pub fn checked_bitxor_assign(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
     ) -> Result<(), CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             self.unchecked_bitxor_assign(ct_left, ct_right);
@@ -387,8 +468,23 @@ impl ServerKey {
     /// // Decrypt:
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(msg ^ msg, res);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.encrypt(msg);
+    /// let mut ct2 = cks.encrypt(msg);
+    ///
+    /// // Compute homomorphically a XOR:
+    /// let ct_res = sks.smart_bitxor(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(msg ^ msg, res);
     /// ```
-    pub fn smart_bitxor(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) -> Ciphertext {
+    pub fn smart_bitxor<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitxor(self, ct_left, ct_right).unwrap()
         })
@@ -411,10 +507,11 @@ impl ServerKey {
     /// let (cks, sks) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
     ///
     /// let modulus = 4;
-    /// // Encrypt two messages:
+    ///
     /// let msg1 = 15;
     /// let msg2 = 3;
     ///
+    /// // Encrypt two messages:
     /// let mut ct1 = cks.unchecked_encrypt(msg1);
     /// let mut ct2 = cks.encrypt(msg2);
     ///
@@ -425,8 +522,23 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct1);
     ///
     /// assert_eq!((msg2 ^ msg1) % modulus, res);
+    ///
+    /// let mut ct1 = cks.unchecked_encrypt_small(msg1);
+    /// let mut ct2 = cks.encrypt_small(msg2);
+    ///
+    /// // Compute homomorphically a XOR:
+    /// sks.smart_bitxor_assign(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct1);
+    ///
+    /// assert_eq!((msg2 ^ msg1) % modulus, res);
     /// ```
-    pub fn smart_bitxor_assign(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) {
+    pub fn smart_bitxor_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitxor_assign(self, ct_left, ct_right).unwrap()
         })
@@ -456,8 +568,21 @@ impl ServerKey {
     ///
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(clear_left | clear_right, res);
+    ///
+    /// // Encrypt two messages
+    /// let ct_left = cks.encrypt_small(clear_left);
+    /// let ct_right = cks.encrypt_small(clear_right);
+    ///
+    /// let ct_res = sks.unchecked_bitor(&ct_left, &ct_right);
+    ///
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(clear_left | clear_right, res);
     /// ```
-    pub fn unchecked_bitor(&self, ct_left: &Ciphertext, ct_right: &Ciphertext) -> Ciphertext {
+    pub fn unchecked_bitor<const OP_ORDER: u8>(
+        &self,
+        ct_left: &CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.unchecked_bitor(self, ct_left, ct_right).unwrap()
         })
@@ -487,8 +612,21 @@ impl ServerKey {
     ///
     /// let res = cks.decrypt(&ct_left);
     /// assert_eq!(clear_left | clear_right, res);
+    ///
+    /// // Encrypt two messages
+    /// let mut ct_left = cks.encrypt_small(clear_left);
+    /// let ct_right = cks.encrypt_small(clear_right);
+    ///
+    /// sks.unchecked_bitor_assign(&mut ct_left, &ct_right);
+    ///
+    /// let res = cks.decrypt(&ct_left);
+    /// assert_eq!(clear_left | clear_right, res);
     /// ```
-    pub fn unchecked_bitor_assign(&self, ct_left: &mut Ciphertext, ct_right: &Ciphertext) {
+    pub fn unchecked_bitor_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine
                 .unchecked_bitor_assign(self, ct_left, ct_right)
@@ -527,9 +665,9 @@ impl ServerKey {
     /// ```
     pub fn checked_bitor(
         &self,
-        ct_left: &Ciphertext,
-        ct_right: &Ciphertext,
-    ) -> Result<Ciphertext, CheckError> {
+        ct_left: &CiphertextBig,
+        ct_right: &CiphertextBig,
+    ) -> Result<CiphertextBig, CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             let ct_result = self.unchecked_bitor(ct_left, ct_right);
             Ok(ct_result)
@@ -568,8 +706,8 @@ impl ServerKey {
     /// ```
     pub fn checked_bitor_assign(
         &self,
-        ct_left: &mut Ciphertext,
-        ct_right: &Ciphertext,
+        ct_left: &mut CiphertextBig,
+        ct_right: &CiphertextBig,
     ) -> Result<(), CheckError> {
         if self.is_functional_bivariate_pbs_possible(ct_left, ct_right) {
             self.unchecked_bitor_assign(ct_left, ct_right);
@@ -604,8 +742,23 @@ impl ServerKey {
     /// // Decrypt:
     /// let res = cks.decrypt(&ct_res);
     /// assert_eq!(msg | msg, res);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.encrypt_small(msg);
+    /// let mut ct2 = cks.encrypt_small(msg);
+    ///
+    /// // Compute homomorphically an OR:
+    /// let ct_res = sks.smart_bitor(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct_res);
+    /// assert_eq!(msg | msg, res);
     /// ```
-    pub fn smart_bitor(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) -> Ciphertext {
+    pub fn smart_bitor<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) -> CiphertextNew<OP_ORDER> {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitor(self, ct_left, ct_right).unwrap()
         })
@@ -628,10 +781,11 @@ impl ServerKey {
     /// let (cks, sks) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
     ///
     /// let modulus = 4;
-    /// // Encrypt two messages:
+    ///
     /// let msg1 = 15;
     /// let msg2 = 3;
     ///
+    /// // Encrypt two messages:
     /// let mut ct1 = cks.unchecked_encrypt(msg1);
     /// let mut ct2 = cks.encrypt(msg2);
     ///
@@ -642,8 +796,24 @@ impl ServerKey {
     /// let res = cks.decrypt(&ct1);
     ///
     /// assert_eq!((msg2 | msg1) % modulus, res);
+    ///
+    /// // Encrypt two messages:
+    /// let mut ct1 = cks.unchecked_encrypt_small(msg1);
+    /// let mut ct2 = cks.encrypt_small(msg2);
+    ///
+    /// // Compute homomorphically an OR:
+    /// sks.smart_bitor_assign(&mut ct1, &mut ct2);
+    ///
+    /// // Decrypt:
+    /// let res = cks.decrypt(&ct1);
+    ///
+    /// assert_eq!((msg2 | msg1) % modulus, res);
     /// ```
-    pub fn smart_bitor_assign(&self, ct_left: &mut Ciphertext, ct_right: &mut Ciphertext) {
+    pub fn smart_bitor_assign<const OP_ORDER: u8>(
+        &self,
+        ct_left: &mut CiphertextNew<OP_ORDER>,
+        ct_right: &mut CiphertextNew<OP_ORDER>,
+    ) {
         ShortintEngine::with_thread_local_mut(|engine| {
             engine.smart_bitor_assign(self, ct_left, ct_right).unwrap()
         })

@@ -252,7 +252,7 @@ impl WopbsKey {
 
         let mut ct_vec_out = vec![];
         for (block, block_out) in ct_in.blocks().iter().zip(vec_ct_out.into_iter()) {
-            ct_vec_out.push(crate::shortint::Ciphertext {
+            ct_vec_out.push(crate::shortint::CiphertextBig {
                 ct: block_out,
                 degree: Degree(block.message_modulus.0 - 1),
                 message_modulus: block.message_modulus,
@@ -334,7 +334,7 @@ impl WopbsKey {
 
         let mut ct_vec_out = vec![];
         for (block, block_out) in ct_in.blocks().iter().zip(vec_ct_out.into_iter()) {
-            ct_vec_out.push(crate::shortint::Ciphertext {
+            ct_vec_out.push(crate::shortint::CiphertextBig {
                 ct: block_out,
                 degree: Degree(block.message_modulus.0 - 1),
                 message_modulus: block.message_modulus,
@@ -1029,9 +1029,9 @@ impl WopbsKey {
             .wopbs_key
             .circuit_bootstrapping_vertical_packing(lut, &extracted_bits_blocks);
 
-        let mut ct_vec_out: Vec<crate::shortint::Ciphertext> = vec![];
+        let mut ct_vec_out: Vec<crate::shortint::CiphertextBig> = vec![];
         for (block, block_out) in vec_ct_in[0].blocks().iter().zip(vec_ct_out.into_iter()) {
-            ct_vec_out.push(crate::shortint::Ciphertext {
+            ct_vec_out.push(crate::shortint::CiphertextBig {
                 ct: block_out,
                 degree: Degree(block.message_modulus.0 - 1),
                 message_modulus: block.message_modulus,
